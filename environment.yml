@@ -1,0 +1,11 @@
+name: deps
+
+dependencies:
+  - click
+  - colorama
+  - jinja2
+  - pyyaml
+
+environment:
+  - PATH:
+    - {{ os.path.join(root, 'bin') }}
