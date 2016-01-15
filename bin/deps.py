@@ -77,10 +77,10 @@ def get_shallow_dependencies_directories(base_directory):
 #=========================================================================
 # Common code
 #=========================================================================
-Dep = namedtuple('Dep', 'name,abspath,relpath,deps')
+Dep = namedtuple('Dep', 'name,abspath,deps')
 
 
-def create_new_dep_from_directory(directory, relative_to):
+def create_new_dep_from_directory(directory):
     '''
     :rtype: Dep
     '''
@@ -88,17 +88,15 @@ def create_new_dep_from_directory(directory, relative_to):
     return Dep(
         name=os.path.split(directory)[1],
         abspath=directory,
-        relpath=os.path.relpath(directory, relative_to),
         deps=[],
     )
 
 
-def find_ancestor_dir_with(filename, directory_inside, begin_in=None):
+def find_ancestor_dir_with(filename, begin_in=None):
     '''
     Look in current and ancestor directories (parent, parent of parent, ...) for a file.
 
     :param unicode filename: file to find
-    :param unicode directory_inside: relative directory to be appended (where file must be)
     :param unicode begin_in: directory to start searching
 
     :rtype: unicode
@@ -109,7 +107,7 @@ def find_ancestor_dir_with(filename, directory_inside, begin_in=None):
 
     base_directory = os.path.abspath(begin_in)
     while True:
-        directory = os.path.join(base_directory, directory_inside)
+        directory = base_directory
         if os.path.exists(os.path.join(directory, filename)):
             return directory
 
@@ -123,15 +121,12 @@ def find_ancestor_dir_with(filename, directory_inside, begin_in=None):
 def find_directories(raw_directories):
     '''
     Find ancestor directories that contain the FILE_WITH_DEPENDENCIES file.
-    Also returns the path from the directory to the current dir (if the current dir is inside any
-    of them).
 
     :type raw_directories: sequence(unicode)
-    :rtype: list(unicode), unicode
-    :returns: list of directories, and the relative path to reach current directory
+    :rtype: list(unicode)
+    :returns: list of directories
     '''
     raw_directories = list(raw_directories)
-    directory_inside = None
 
     if len(raw_directories) == 0:
         raw_directories.append(os.path.curdir)
@@ -145,15 +140,8 @@ def find_directories(raw_directories):
                 FILE_WITH_DEPENDENCIES, raw_dir))
             sys.exit(1)
         directories.append(directory)
-        if directory_inside is None:
-            relative_path_to_here = os.path.relpath(os.path.curdir, directory)
-            if not relative_path_to_here.startswith(os.path.pardir):
-                directory_inside = relative_path_to_here
 
-    if directory_inside is None:
-        directory_inside = os.path.curdir
-
-    return directories, directory_inside
+    return directories
 
 
 def is_executable_and_get_suffix(filename):
@@ -229,7 +217,6 @@ def cli(command, projects, pretty_print, ignore_filter, if_exist, here, dry_run,
         \b
         <command> may contain some variables:
           * {name}: The dependency bare name (ex.: eden)
-          * {dir}:  The dependency relative path (ex.: ../eden)
           * {abs}:  The dependency absolute path (ex.: X:\\ws\\eden)
 
       Note that if the first command word is an existing executable file
@@ -237,7 +224,7 @@ def cli(command, projects, pretty_print, ignore_filter, if_exist, here, dry_run,
       dependencies that do not have this file inside.
     '''
     # ------------------------------------------------------------------------
-    directories, directory_inside = find_directories(projects.split(','))
+    directories = find_directories(projects.split(','))
 
     # find dependencies recursively for each directory
     # (if we ever need something fancier, there is "pycosat" or "networkx" to solve this stuff)
@@ -246,8 +233,7 @@ def cli(command, projects, pretty_print, ignore_filter, if_exist, here, dry_run,
     def add_deps_from_directories(directories, list_to_add_deps):
         for dep_directory in directories:
             if dep_directory not in all_deps:
-                dep = create_new_dep_from_directory(
-                    dep_directory, os.path.curdir)
+                dep = create_new_dep_from_directory(dep_directory)
                 all_deps[dep_directory] = dep
                 current_dep_directories = get_shallow_dependencies_directories(
                     dep_directory)
@@ -295,21 +281,30 @@ def cli(command, projects, pretty_print, ignore_filter, if_exist, here, dry_run,
     # execution
     #=========================================================================
 
-    if verbose:
-        echo_verbose_msg('working directory: ' +
-                 os.path.join('<dependency>', directory_inside))
-
     filter_if_exist = []
     if if_exist:
         filter_if_exist.extend(if_exist)
 
+    def format_command(command, dep):
+        format_dict = {
+            'name': dep.name, 'abs': dep.abspath}
+
+        def _format(s, format_dict):
+            for key, item in format_dict.iteritems():
+                s = s.replace('{' + key + '}', item)
+            return s
+
+        if isinstance(command, (list, tuple)):
+            return [_format(a, format_dict) for a in command]
+        else:
+            return _format(command, format_dict)
+
     # check if command is an executable relative to dependency working dir
 
     first_dep = root_deps[0]
-    first_working_dir = os.path.abspath(
-        os.path.join(first_dep.abspath, directory_inside))
+    first_working_dir = first_dep.abspath
     first_command = command[0]
-    expanded_first_command = first_command.format(name=first_dep.name)
+    expanded_first_command = format_command(first_command, first_dep)
 
     is_executable, suffix = is_executable_and_get_suffix(
         os.path.join(first_working_dir, expanded_first_command))
@@ -322,8 +317,7 @@ def cli(command, projects, pretty_print, ignore_filter, if_exist, here, dry_run,
 
     def pass_filter(dep):
         for f in filter_if_exist:
-            file_to_check = os.path.join(
-                dep.abspath, directory_inside, f.format(name=dep.name))
+            file_to_check = os.path.join(dep.abspath, format_command(f, dep))
             if not os.path.isfile(file_to_check) and not os.path.isdir(file_to_check):
                 return False
         return True
@@ -332,7 +326,7 @@ def cli(command, projects, pretty_print, ignore_filter, if_exist, here, dry_run,
     for dep in deps_in_order:
         working_dir = None
         if not here:
-            working_dir = os.path.join(dep.abspath, directory_inside)
+            working_dir = dep.abspath
 
         click.secho('\n' + '=' * MAX_LINE_LENGTH, fg='black', bold=True)
         if not pass_filter(dep) or (working_dir and not os.path.isdir(working_dir)):
@@ -340,15 +334,7 @@ def cli(command, projects, pretty_print, ignore_filter, if_exist, here, dry_run,
             continue
         click.secho('{}:'.format(dep.name), fg='cyan', bold=True)
 
-        format_dict = {
-            'name': dep.name, 'dir': dep.relpath, 'abs': dep.abspath}
-
-        def _format(s, format_dict):
-            for key, item in format_dict.iteritems():
-                s = s.replace('{' + key + '}', item)
-            return s
-
-        formatted_command = [_format(a, format_dict) for a in command]
+        formatted_command = format_command(command, dep)
 
         if verbose or dry_run:
             command_to_print = ' '.join(
