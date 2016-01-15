@@ -6,7 +6,6 @@ import click
 import io
 import os
 import platform
-import re
 import subprocess
 import sys
 
@@ -16,7 +15,7 @@ PROG_MSG_PREFIX = PROG_NAME + ': '
 MAX_LINE_LENGTH = 79
 
 
-def echo_msg(*args, **kwargs):
+def echo_verbose_msg(*args, **kwargs):
     '''
     For "verbose" messages.
     '''
@@ -177,7 +176,7 @@ def is_executable_and_get_suffix(filename):
     return False, None
 
 
-@click.command()
+@click.command(name=PROG_NAME)
 @click.argument('command', nargs=-1)
 @click.version_option('1.0')
 @click.option(
@@ -297,7 +296,7 @@ def cli(command, projects, pretty_print, ignore_filter, if_exist, here, dry_run,
     #=========================================================================
 
     if verbose:
-        echo_msg('working directory: ' +
+        echo_verbose_msg('working directory: ' +
                  os.path.join('<dependency>', directory_inside))
 
     filter_if_exist = []
@@ -342,7 +341,7 @@ def cli(command, projects, pretty_print, ignore_filter, if_exist, here, dry_run,
         click.secho('{}:'.format(dep.name), fg='cyan', bold=True)
 
         format_dict = {
-            b'name': dep.name, b'dir': dep.relpath, b'abs': dep.abspath}
+            'name': dep.name, 'dir': dep.relpath, 'abs': dep.abspath}
 
         def _format(s, format_dict):
             for key, item in format_dict.iteritems():
@@ -354,9 +353,9 @@ def cli(command, projects, pretty_print, ignore_filter, if_exist, here, dry_run,
         if verbose or dry_run:
             command_to_print = ' '.join(
                 arg.replace(' ', '\\ ') for arg in formatted_command)
-            echo_msg('executing: ' + command_to_print)
+            echo_verbose_msg('executing: ' + command_to_print)
             if working_dir:
-                echo_msg('from:      ' + working_dir)
+                echo_verbose_msg('from:      ' + working_dir)
 
         if not dry_run:
             # Note: could use something like this for more robustness:
@@ -367,8 +366,8 @@ def cli(command, projects, pretty_print, ignore_filter, if_exist, here, dry_run,
                 process.communicate()
 
             if verbose:
-                echo_msg('return code: {}'.format(process.returncode))
+                echo_verbose_msg('return code: {}'.format(process.returncode))
 
 
-if __name__ == b'__main__':
+if __name__ == '__main__':
     cli()
