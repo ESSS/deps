@@ -16,18 +16,18 @@ MAX_LINE_LENGTH = 79
 
 
 def echo_verbose_msg(*args, **kwargs):
-    '''
+    """
     For "verbose" messages.
-    '''
+    """
     click.echo(PROG_MSG_PREFIX, nl=False, file=sys.stderr)
     kwargs.update(file=sys.stderr)
     click.echo(*args, **kwargs)
 
 
 def echo_error(*args, **kwargs):
-    '''
+    """
     For "error" messages.
-    '''
+    """
     click.secho(
         PROG_MSG_PREFIX + 'error: ', nl=False, file=sys.stderr, fg='red', bold=True)
     kwargs.update(file=sys.stderr)
@@ -49,14 +49,20 @@ def cd(newdir):
             os.chdir(prevdir)
 
 
-#=========================================================================
+# ==================================================================================================
 # Customizations
-#=========================================================================
+# ==================================================================================================
 
 FILE_WITH_DEPENDENCIES = 'environment.yml'
 
 
 def get_shallow_dependencies_directories(base_directory):
+    """
+    :type base_directory: unicode
+    :rtype: list(unicode)
+    :return: the first level (does not recursevely list dependencies of dependencies) dependencies
+    of the project rooted in the given directory
+    """
     import jinja2
     import yaml
 
@@ -74,16 +80,17 @@ def get_shallow_dependencies_directories(base_directory):
     return includes
 
 
-#=========================================================================
+# ==================================================================================================
 # Common code
-#=========================================================================
+# ==================================================================================================
 Dep = namedtuple('Dep', 'name,abspath,deps')
 
 
 def create_new_dep_from_directory(directory):
-    '''
+    """
+    :param unicode directory: root directory of a project
     :rtype: Dep
-    '''
+    """
     directory = os.path.abspath(directory)
     return Dep(
         name=os.path.split(directory)[1],
@@ -93,7 +100,7 @@ def create_new_dep_from_directory(directory):
 
 
 def find_ancestor_dir_with(filename, begin_in=None):
-    '''
+    """
     Look in current and ancestor directories (parent, parent of parent, ...) for a file.
 
     :param unicode filename: file to find
@@ -101,7 +108,7 @@ def find_ancestor_dir_with(filename, begin_in=None):
 
     :rtype: unicode
     :return: absolute path to directory where file is located
-    '''
+    """
     if begin_in is None:
         begin_in = os.curdir
 
@@ -119,13 +126,13 @@ def find_ancestor_dir_with(filename, begin_in=None):
 
 
 def find_directories(raw_directories):
-    '''
+    """
     Find ancestor directories that contain the FILE_WITH_DEPENDENCIES file.
 
     :type raw_directories: sequence(unicode)
     :rtype: list(unicode)
     :returns: list of directories
-    '''
+    """
     raw_directories = list(raw_directories)
 
     if len(raw_directories) == 0:
@@ -145,10 +152,11 @@ def find_directories(raw_directories):
 
 
 def is_executable_and_get_suffix(filename):
-    '''
+    """
+    :type filename: unicode
     :returns: (False, None) if filename is not an executable, or (True, ext), where ext is a suffix
     to append to the filename to get the executable full name (or '' if it is not needed).
-    '''
+    """
     if platform.system() != 'Windows':
         return (os.path.isfile(filename) and os.access(filename, os.X_OK)), ''
 
@@ -190,7 +198,7 @@ def is_executable_and_get_suffix(filename):
     help='Print more information.')
 def cli(command, projects, pretty_print, ignore_filter, if_exist, here, dry_run, verbose):
     # ------------------------------------------------------------------------
-    '''
+    """
     Program to list dependencies of a project, or to execute a command for
     each dependency.
 
@@ -222,7 +230,7 @@ def cli(command, projects, pretty_print, ignore_filter, if_exist, here, dry_run,
       Note that if the first command word is an existing executable file
       relative to the current directory, it will automatically skip
       dependencies that do not have this file inside.
-    '''
+    """
     # ------------------------------------------------------------------------
     directories = find_directories(projects.split(','))
 
@@ -231,6 +239,13 @@ def cli(command, projects, pretty_print, ignore_filter, if_exist, here, dry_run,
     all_deps = {}
 
     def add_deps_from_directories(directories, list_to_add_deps):
+        """
+        A data structure (`Dep`) is created for each project rooted in the given directories.
+
+        :param sequence(unicode) directories: projects' roots to use
+        :param list(Dep) list_to_add_deps: a list to be populated with the created `Dep`s
+        processed `Dep`s (in case multiple projects have the same dependency)
+        """
         for dep_directory in directories:
             if dep_directory not in all_deps:
                 dep = create_new_dep_from_directory(dep_directory)
@@ -264,6 +279,11 @@ def cli(command, projects, pretty_print, ignore_filter, if_exist, here, dry_run,
     deps_in_order = []
 
     def walk_deps(dep_list):
+        """
+        Recursively list the given `Dep`s' dependencies populating `deps_in_order` from the deepest
+        dependency to the root project, no dependency/project is added twice.
+        :param sequence(Dep) dep_list: the dependencies/projects to list dependencies (recursively)
+        """
         for dep in dep_list:
             if dep.abspath not in already_walked:
                 already_walked.add(dep.abspath)
@@ -286,10 +306,21 @@ def cli(command, projects, pretty_print, ignore_filter, if_exist, here, dry_run,
         filter_if_exist.extend(if_exist)
 
     def format_command(command, dep):
+        """
+        Process the variables in command.
+        :type command: unicode | sequence(unicode)
+        :type dep: Dep
+        :rtype: unicode | list(unicode)
+        """
         format_dict = {
             'name': dep.name, 'abs': dep.abspath}
 
         def _format(s, format_dict):
+            """
+            :type s: unicode
+            :type format_dict: dict(unicode,unicode)
+            :rtype: unicode
+            """
             for key, item in format_dict.iteritems():
                 s = s.replace('{' + key + '}', item)
             return s
@@ -316,6 +347,10 @@ def cli(command, projects, pretty_print, ignore_filter, if_exist, here, dry_run,
         filter_if_exist = []
 
     def pass_filter(dep):
+        """
+        :type dep: Dep
+        :return: `True` if the necessary files/folders are present, `False` otherwise.
+        """
         for f in filter_if_exist:
             file_to_check = os.path.join(dep.abspath, format_command(f, dep))
             if not os.path.isfile(file_to_check) and not os.path.isdir(file_to_check):
