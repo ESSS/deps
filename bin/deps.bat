@@ -1,1 +1,1 @@
-@python %~dp0\deps.py %*
+@python -m deps.deps_cli %*

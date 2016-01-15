@@ -7,5 +7,8 @@ dependencies:
   - pyyaml
 
 environment:
+  - PYTHONPATH:
+    - {{ os.path.join(root, 'source', 'python') }}
+
   - PATH:
     - {{ os.path.join(root, 'bin') }}
