@@ -381,11 +381,26 @@ def cli(command, projects, pretty_print, ignore_filter, if_exist, here, dry_run,
             # http://stackoverflow.com/questions/13243807/popen-waiting-for-child-process-even-when-the-immediate-child-has-terminated/13256908#13256908
 
             with cd(working_dir):
-                process = subprocess.Popen(formatted_command, shell=True)
-                process.communicate()
+                process = shell_execute(formatted_command)
 
             if verbose:
                 echo_verbose_msg('return code: {}'.format(process.returncode))
+
+
+def shell_execute(command):
+    """
+    Wrapper function the execute the command.
+    This function exists solely to be overwritten on tests since subprocess output is not captured
+    by the `click.testing.CliRunner`, in the wild the processes' output could be very large so
+    piping is not an option.
+
+    :type command: unicode | list(unicode)
+    :rtype: subprocess.Popen
+    :return: the process object used to run the command.
+    """
+    process = subprocess.Popen(command, shell=True)
+    process.communicate()
+    return process
 
 
 if __name__ == '__main__':
