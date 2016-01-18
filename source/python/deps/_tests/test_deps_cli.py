@@ -4,6 +4,7 @@ from deps import deps_cli
 import os
 import pytest
 import stat
+import sys
 import textwrap
 
 
@@ -142,13 +143,11 @@ def test_script_execution(cli_runner, project_tree, piped_shell_execute):
     """
     :type cli_runner: click.testing.CliRunner
     :type project_tree: py.path.local
+    :type piped_shell_execute: mocker.patch
     """
     root_b = unicode(project_tree.join('root_b'))
     command_args = ['-p', root_b, '-v', 'asd', '{name}', '{abs}']
     result = cli_runner.invoke(deps_cli.cli, command_args)
-    print
-    print result.output
-    assert False
     assert result.exit_code == 0
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
@@ -171,6 +170,112 @@ def test_script_execution(cli_runner, project_tree, piped_shell_execute):
         'deps: executing: asd root_b *root_b',
         'deps: from:      *root_b',
         'Sample script root_b *root_b',
+        '',
+        'deps: return code: 0',
+    ])
+
+
+
+@pytest.mark.parametrize('use_env_var', [
+    True,
+    False,
+])
+def test_script_execution_fallback(
+    use_env_var,
+    cli_runner,
+    project_tree,
+    piped_shell_execute,
+    tmpdir,
+    mocker,
+):
+    """
+    :type use_env_var: bool
+    :type cli_runner: click.testing.CliRunner
+    :type project_tree: py.path.local
+    :type piped_shell_execute: mocker.patch
+    :type tmpdir: py.path.local
+    :type mocker: mocker
+    """
+    # Create a fallback.
+    batch_script = textwrap.dedent(
+        '''\
+        @echo Fallback script for asd %*
+        '''
+    )
+    bash_script = textwrap.dedent(
+        '''\
+        #!/bin/bash
+        echo Fallback script for asd "$@"
+        '''
+    )
+    script_file = tmpdir.join('asd.bat')
+    script_file.write(batch_script)
+    script_file = tmpdir.join('asd')
+    script_file.write(bash_script)
+    script_file = unicode(script_file)
+    st = os.stat(script_file)
+    os.chmod(script_file, st.st_mode | stat.S_IEXEC)
+    # Prepare the invocation.
+    root_a = unicode(project_tree.join('root_a'))
+    command_args = ['-p', root_a, '-v', 'asd', '{name}', '{abs}']
+    # Configure the fallback path.
+    if use_env_var:
+        encoding = sys.getfilesystemencoding()
+        env_values = {b'DEPS_FALLBACK_PATHS': unicode(tmpdir).encode(encoding)}
+        mocker.patch.dict('os.environ', env_values)
+    else:
+        command_args.insert(0, '--fallback-paths')
+        command_args.insert(1, unicode(tmpdir))
+
+    result = cli_runner.invoke(deps_cli.cli, command_args)
+    assert result.exit_code == 0
+    matcher = LineMatcher(result.output.splitlines())
+    matcher.fnmatch_lines([
+        '===============================================================================',
+        'dep_z:',
+        'deps: executing: asd dep_z *test_projects0?dep_z',
+        'deps: from:      *test_projects0?dep_z',
+        'Sample script dep_z *test_projects0?dep_z',
+        '',
+        'deps: return code: 0',
+        '',
+        '===============================================================================',
+        'dep_a.1.1:',
+        'deps: executing: *test_script_execution_fallback??asd dep_a.1.1 *test_projects0?dep_a.1.1',
+        'deps: from:      *test_projects0?dep_a.1.1',
+        'Fallback script for asd dep_a.1.1 *test_projects0?dep_a.1.1',
+        '',
+        'deps: return code: 0',
+        '',
+        '===============================================================================',
+        'dep_a.1.2:',
+        'deps: executing: *test_script_execution_fallback??asd dep_a.1.2 *test_projects0?dep_a.1.2',
+        'deps: from:      *test_projects0?dep_a.1.2',
+        'Fallback script for asd dep_a.1.2 *test_projects0?dep_a.1.2',
+        '',
+        'deps: return code: 0',
+        '',
+        '===============================================================================',
+        'dep_a.1:',
+        'deps: executing: *test_script_execution_fallback??asd dep_a.1 *test_projects0?dep_a.1',
+        'deps: from:      *test_projects0?dep_a.1',
+        'Fallback script for asd dep_a.1 *test_projects0?dep_a.1',
+        '',
+        'deps: return code: 0',
+        '',
+        '===============================================================================',
+        'dep_a.2:',
+        'deps: executing: *test_script_execution_fallback??asd dep_a.2 *test_projects0?dep_a.2',
+        'deps: from:      *test_projects0?dep_a.2',
+        'Fallback script for asd dep_a.2 *test_projects0?dep_a.2',
+        '',
+        'deps: return code: 0',
+        '',
+        '===============================================================================',
+        'root_a:',
+        'deps: executing: *test_script_execution_fallback??asd root_a *test_projects0?root_a',
+        'deps: from:      *test_projects0?root_a',
+        'Fallback script for asd root_a *test_projects0?root_a',
         '',
         'deps: return code: 0',
     ])
