@@ -5,7 +5,6 @@ from contextlib import contextmanager
 import click
 import io
 import os
-import platform
 import subprocess
 import sys
 
@@ -157,17 +156,16 @@ def is_executable_and_get_suffix(filename):
     :returns: (False, None) if filename is not an executable, or (True, ext), where ext is a suffix
     to append to the filename to get the executable full name (or '' if it is not needed).
     """
-    if platform.system() != 'Windows':
+    if not sys.platform.startswith('win'):
         return (os.path.isfile(filename) and os.access(filename, os.X_OK)), ''
 
-    if os.path.isfile(filename):
-        name, ext = os.path.splitext(filename)
-        if ext.lower() in (x.lower() for x in os.environ['PATHEXT'].split(';')):
-            return True, ''
-    else:
-        for ext in os.environ['PATHEXT'].split(';'):
-            if os.path.isfile(''.join((filename, ext))):
-                return True, ext
+    executable_extensions = os.environ['PATHEXT'].lower().split(';')
+    name, ext = os.path.splitext(filename)
+    if os.path.isfile(filename) and ext.lower() in executable_extensions:
+        return True, ''
+    for ext in executable_extensions:
+        if os.path.isfile(''.join((filename, ext))):
+            return True, ext
 
     return False, None
 
