@@ -3,6 +3,7 @@ name: deps
 dependencies:
   - click
   - colorama
+  - pytest
   - jinja2
   - pyyaml
 

@@ -1,0 +1,55 @@
+matrix:
+  platform:
+  - win64,windows
+  - linux64,linux,release
+
+  
+branch_patterns:
+- master
+- fb-.*
+
+
+display_name: "[{branch}] {name} {platform}"
+
+
+branch-fb-.*:notify_stash:
+
+
+git:
+    reference: "$WORKSPACE/../../Shared/ref_repos/{name}"
+
+
+junit_patterns:
+- "**/build/tests/*.xml"
+
+
+timeout: 5
+
+
+label_expression: "{platform}"
+
+
+platform-windows:build_batch_commands:
+- |
+    subst /D K:
+    subst K: "%WORKSPACE%"
+    if not "%ERRORLEVEL%" == "0" exit /B 1
+    set PLATFORM={platform}
+    set CONDA_FORCE_32BIT=
+    set ESSS_DEBUG=
+    set CONDARC=%WORKSPACE%/{name}/etc/slave_condarc
+    call conda clean --lock
+    call conda env update --prune
+    call activate {name}
+    py.test -l --junit-xml=$WORKSPACE/{name}/build/tests/{name}-pytest.xml
+  
+  
+platform-linux:build_shell_commands:
+- |
+    export PATH=$HOME/Work/miniconda/bin:$PATH
+    cd $WORKSPACE/{name}
+    conda env update --prune
+    source activate {name}
+    py.test -l --junit-xml=$WORKSPACE/{name}/build/tests/{name}-pytest.xml
+
+
