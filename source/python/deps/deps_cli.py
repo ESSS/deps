@@ -388,7 +388,6 @@ def cli(command, projects, pretty_print, ignore_filter, if_exist, here, dry_run,
             continue
         click.secho('{}:'.format(dep.name), fg='cyan', bold=True)
 
-
         if verbose or dry_run:
             command_to_print = ' '.join(
                 arg.replace(' ', '\\ ') for arg in formatted_command)
@@ -401,6 +400,11 @@ def cli(command, projects, pretty_print, ignore_filter, if_exist, here, dry_run,
             # http://stackoverflow.com/questions/13243807/popen-waiting-for-child-process-even-when-the-immediate-child-has-terminated/13256908#13256908
 
             with cd(working_dir):
+                if not sys.platform.startswith('win'):
+                    import pipes
+                    for index, item in enumerate(formatted_command):
+                        formatted_command[index] = pipes.quote(item)
+                    formatted_command = ' '.join(formatted_command)
                 process = shell_execute(formatted_command)
 
             if verbose:
