@@ -146,14 +146,15 @@ def test_script_execution(cli_runner, project_tree, piped_shell_execute):
     :type piped_shell_execute: mocker.patch
     """
     root_b = unicode(project_tree.join('root_b'))
-    command_args = ['-p', root_b, '-v', 'asd', '{name}', '{abs}']
+    task_script = os.path.join('tasks', 'asd')
+    command_args = ['-p', root_b, '-v', task_script, '{name}', '{abs}']
     result = cli_runner.invoke(deps_cli.cli, command_args)
     assert result.exit_code == 0
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
         '===============================================================================',
         'dep_z:',
-        'deps: executing: asd dep_z *dep_z',
+        'deps: executing: tasks?asd dep_z *dep_z',
         'deps: from:      *dep_z',
         'Sample script dep_z *dep_z',
         '',
@@ -167,7 +168,7 @@ def test_script_execution(cli_runner, project_tree, piped_shell_execute):
         '',
         '===============================================================================',
         'root_b:',
-        'deps: executing: asd root_b *root_b',
+        'deps: executing: tasks?asd root_b *root_b',
         'deps: from:      *root_b',
         'Sample script root_b *root_b',
         '',
@@ -208,16 +209,18 @@ def test_script_execution_fallback(
         echo Fallback script for asd "$@"
         '''
     )
-    script_file = tmpdir.join('asd.bat')
+    tasks_dir = tmpdir.mkdir('tasks')
+    script_file = tasks_dir.join('asd.bat')
     script_file.write(batch_script)
-    script_file = tmpdir.join('asd')
+    script_file = tasks_dir.join('asd')
     script_file.write(bash_script)
     script_file = unicode(script_file)
     st = os.stat(script_file)
     os.chmod(script_file, st.st_mode | stat.S_IEXEC)
     # Prepare the invocation.
     root_a = unicode(project_tree.join('root_a'))
-    command_args = ['-p', root_a, '-v', 'asd', '{name}', '{abs}']
+    task_script = os.path.join('tasks', 'asd')
+    command_args = ['-p', root_a, '-v', task_script, '{name}', '{abs}']
     # Configure the fallback path.
     if use_env_var:
         encoding = sys.getfilesystemencoding()
@@ -233,7 +236,7 @@ def test_script_execution_fallback(
     matcher.fnmatch_lines([
         '===============================================================================',
         'dep_z:',
-        'deps: executing: asd dep_z *test_projects0?dep_z',
+        'deps: executing: tasks?asd dep_z *test_projects0?dep_z',
         'deps: from:      *test_projects0?dep_z',
         'Sample script dep_z *test_projects0?dep_z',
         '',
@@ -241,7 +244,7 @@ def test_script_execution_fallback(
         '',
         '===============================================================================',
         'dep_a.1.1:',
-        'deps: executing: *test_script_execution_fallback??asd dep_a.1.1 *test_projects0?dep_a.1.1',
+        'deps: executing: *test_script_execution_fallback??tasks?asd dep_a.1.1 *test_projects0?dep_a.1.1',
         'deps: from:      *test_projects0?dep_a.1.1',
         'Fallback script for asd dep_a.1.1 *test_projects0?dep_a.1.1',
         '',
@@ -249,7 +252,7 @@ def test_script_execution_fallback(
         '',
         '===============================================================================',
         'dep_a.1.2:',
-        'deps: executing: *test_script_execution_fallback??asd dep_a.1.2 *test_projects0?dep_a.1.2',
+        'deps: executing: *test_script_execution_fallback??tasks?asd dep_a.1.2 *test_projects0?dep_a.1.2',
         'deps: from:      *test_projects0?dep_a.1.2',
         'Fallback script for asd dep_a.1.2 *test_projects0?dep_a.1.2',
         '',
@@ -257,7 +260,7 @@ def test_script_execution_fallback(
         '',
         '===============================================================================',
         'dep_a.1:',
-        'deps: executing: *test_script_execution_fallback??asd dep_a.1 *test_projects0?dep_a.1',
+        'deps: executing: *test_script_execution_fallback??tasks?asd dep_a.1 *test_projects0?dep_a.1',
         'deps: from:      *test_projects0?dep_a.1',
         'Fallback script for asd dep_a.1 *test_projects0?dep_a.1',
         '',
@@ -265,7 +268,7 @@ def test_script_execution_fallback(
         '',
         '===============================================================================',
         'dep_a.2:',
-        'deps: executing: *test_script_execution_fallback??asd dep_a.2 *test_projects0?dep_a.2',
+        'deps: executing: *test_script_execution_fallback??tasks?asd dep_a.2 *test_projects0?dep_a.2',
         'deps: from:      *test_projects0?dep_a.2',
         'Fallback script for asd dep_a.2 *test_projects0?dep_a.2',
         '',
@@ -273,7 +276,7 @@ def test_script_execution_fallback(
         '',
         '===============================================================================',
         'root_a:',
-        'deps: executing: *test_script_execution_fallback??asd root_a *test_projects0?root_a',
+        'deps: executing: *test_script_execution_fallback??tasks?asd root_a *test_projects0?root_a',
         'deps: from:      *test_projects0?root_a',
         'Fallback script for asd root_a *test_projects0?root_a',
         '',
@@ -322,9 +325,10 @@ def project_tree(tmpdir_factory):
         '''
     )
     for proj in ['root_b', 'dep_z']:
-        script_file = test_projects.join(proj).join('asd.bat')
+        tasks_dir = test_projects.join(proj).mkdir('tasks')
+        script_file = tasks_dir.join('asd.bat')
         script_file.write(batch_script)
-        script_file = test_projects.join(proj).join('asd')
+        script_file = tasks_dir.join('asd')
         script_file.write(bash_script)
         script_file = unicode(script_file)
         st = os.stat(script_file)
