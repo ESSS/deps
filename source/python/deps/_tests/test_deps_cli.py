@@ -8,6 +8,74 @@ import sys
 import textwrap
 
 
+@pytest.fixture(scope='session')
+def project_tree(tmpdir_factory):
+    """
+    :type tmpdir_factory: _pytest.tmpdir.TempdirFactory
+    :rtype: py.path.local
+    """
+    test_projects = tmpdir_factory.mktemp('test_projects')
+    projects = {
+        'root_a': ['dep_a.1', 'dep_a.2'],
+        'root_b': ['dep_b.1'],
+        'dep_a.1': ['dep_a.1.1', 'dep_a.1.2'],
+        'dep_a.2': ['dep_z'],
+        'dep_a.1.1': ['dep_z'],
+        'dep_a.1.2': ['dep_z'],
+        'dep_b.1': ['dep_b.1.1'],
+        'dep_b.1.1': ['dep_z'],
+        'dep_z': [],
+    }
+    for proj, deps in projects.iteritems():
+        proj_dir = test_projects.mkdir(proj)
+        env_yml = proj_dir.join('environment.yml')
+        env_content = ['name: {}'.format(proj), '']
+        if len(deps) > 0:
+            env_content.append('includes:')
+            env_content.extend(
+                ['  - {{{{ root }}}}/../{}/environment.yml'.format(dep) for dep in deps])
+            env_content.append('')
+        env_yml.write('\n'.join(env_content))
+    # Add a non-project folder.
+    test_projects.mkdir('not_a_project')
+    # Add test scripts to some projects.
+    batch_script = textwrap.dedent(
+        '''\
+        @echo Sample script %*
+        '''
+    )
+    bash_script = textwrap.dedent(
+        '''\
+        #!/bin/bash
+        echo Sample script "$@"
+        '''
+    )
+    python_script = textwrap.dedent(
+        '''\
+        import os
+        import sys
+        print "From python script!"
+        print " - sys.argv[1:]: {};".format(sys.argv[1:])
+        print " - cwd: {};".format(os.getcwd())
+        '''
+    )
+    for proj in ['root_b', 'dep_z']:
+        tasks_dir = test_projects.join(proj).mkdir('tasks')
+        script_file = tasks_dir.join('asd.bat')
+        script_file.write(batch_script)
+
+        script_file = tasks_dir.join('asd')
+        script_file.write(bash_script)
+        script_file = unicode(script_file)
+        st = os.stat(script_file)
+        os.chmod(script_file, st.st_mode | stat.S_IEXEC)
+
+        script_file = tasks_dir.join('py_get_cwd.py')
+        script_file.write(python_script)
+
+    return test_projects
+
+
 def test_deps_help(cli_runner):
     """
     :type cli_runner: click.testing.CliRunner
@@ -304,56 +372,4 @@ def test_script_execution_fallback(
         '',
         'deps: return code: 0',
     ])
-
-
-@pytest.fixture(scope='session')
-def project_tree(tmpdir_factory):
-    """
-    :type tmpdir_factory: _pytest.tmpdir.TempdirFactory
-    :rtype: py.path.local
-    """
-    test_projects = tmpdir_factory.mktemp('test_projects')
-    projects = {
-        'root_a': ['dep_a.1', 'dep_a.2'],
-        'root_b': ['dep_b.1'],
-        'dep_a.1': ['dep_a.1.1', 'dep_a.1.2'],
-        'dep_a.2': ['dep_z'],
-        'dep_a.1.1': ['dep_z'],
-        'dep_a.1.2': ['dep_z'],
-        'dep_b.1': ['dep_b.1.1'],
-        'dep_b.1.1': ['dep_z'],
-        'dep_z': [],
-    }
-    for proj, deps in projects.iteritems():
-        proj_dir = test_projects.mkdir(proj)
-        env_yml = proj_dir.join('environment.yml')
-        env_content = ['name: {}'.format(proj), '']
-        if len(deps) > 0:
-            env_content.append('includes:')
-            env_content.extend(
-                ['  - {{{{ root }}}}/../{}/environment.yml'.format(dep) for dep in deps])
-            env_content.append('')
-        env_yml.write('\n'.join(env_content))
-    # Add test scripts to some projects.
-    batch_script = textwrap.dedent(
-        '''\
-        @echo Sample script %*
-        '''
-    )
-    bash_script = textwrap.dedent(
-        '''\
-        #!/bin/bash
-        echo Sample script "$@"
-        '''
-    )
-    for proj in ['root_b', 'dep_z']:
-        tasks_dir = test_projects.join(proj).mkdir('tasks')
-        script_file = tasks_dir.join('asd.bat')
-        script_file.write(batch_script)
-        script_file = tasks_dir.join('asd')
-        script_file.write(bash_script)
-        script_file = unicode(script_file)
-        st = os.stat(script_file)
-        os.chmod(script_file, st.st_mode | stat.S_IEXEC)
-    return test_projects
 

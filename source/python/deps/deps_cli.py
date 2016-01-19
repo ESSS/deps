@@ -144,7 +144,7 @@ def find_directories(raw_directories):
         if directory is None:
             echo_error('could not find "{}" for "{}".'.format(
                 FILE_WITH_DEPENDENCIES, raw_dir))
-            sys.exit(1)
+            raise click.ClickException()
         directories.append(directory)
 
     return directories
