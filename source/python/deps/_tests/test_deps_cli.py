@@ -93,12 +93,13 @@ def test_deps_help(cli_runner):
     ])
 
 
-def test_no_args(cli_runner, project_tree):
+def test_no_args(cli_runner, project_tree, monkeypatch):
     """
     :type cli_runner: click.testing.CliRunner
     :type project_tree: py.path.local
+    :type monkeypatch: _pytest.monkeypatch
     """
-    os.chdir(unicode(project_tree.join('root_b')))
+    monkeypatch.chdir(project_tree.join('root_b'))
     result = cli_runner.invoke(deps_cli.cli)
     assert result.exit_code == 0
     assert result.output == textwrap.dedent(
@@ -111,12 +112,79 @@ def test_no_args(cli_runner, project_tree):
     )
 
 
-def test_execution_on_project_dir(cli_runner, project_tree):
+def test_interpreter_awareness(cli_runner, project_tree, piped_shell_execute):
     """
     :type cli_runner: click.testing.CliRunner
     :type project_tree: py.path.local
+    :type piped_shell_execute: mocker.patch
     """
-    os.chdir(unicode(project_tree.join('root_b')))
+    root_b = unicode(project_tree.join('root_b'))
+    task_script = os.path.join('tasks', 'py_get_cwd.py')
+    command_args = ['-p', root_b, '-v', task_script, '{name}']
+    result = cli_runner.invoke(deps_cli.cli, command_args)
+    assert result.exit_code == 0
+    matcher = LineMatcher(result.output.splitlines())
+    matcher.fnmatch_lines([
+        '===============================================================================',
+        'dep_z:',
+        'deps: executing: *[\\/]python.exe tasks[\\/]py_get_cwd.py dep_z',
+        'deps: from:      *[\\/]test_projects0[\\/]dep_z',
+        'From python script!',
+        ' - sys.argv[1:]: [\'dep_z\'];',
+        ' - cwd: *[\\/]test_projects0[\\/]dep_z;',
+        '',
+        'deps: return code: 0',
+        '',
+        '===============================================================================',
+        'dep_b.1.1: skipping',
+        '',
+        '===============================================================================',
+        'dep_b.1: skipping',
+        '',
+        '===============================================================================',
+        'root_b:',
+        'deps: executing: *[\\/]python.exe tasks[\\/]py_get_cwd.py root_b',
+        'deps: from:      *[\\/]test_projects0[\\/]root_b',
+        'From python script!',
+        ' - sys.argv[1:]: [\'root_b\'];',
+        ' - cwd: *[\\/]test_projects0[\\/]root_b;',
+        '',
+        'deps: return code: 0',
+    ])
+
+
+def test_cant_find_root(cli_runner, project_tree, piped_shell_execute):
+    """
+    :type cli_runner: click.testing.CliRunner
+    :type project_tree: py.path.local
+    :type piped_shell_execute: mocker.patch
+    """
+    proj_dir = unicode(project_tree.join('not_a_project'))
+    command_args = ['-p', proj_dir, 'echo', 'Hi', '{name}!']
+    result = cli_runner.invoke(deps_cli.cli, command_args)
+    assert result.exit_code != 0
+    matcher = LineMatcher(result.output.splitlines())
+    matcher.fnmatch_lines([
+        'deps: error: could not find "environment.yml" for "*[\\/]test_projects0[\\/]not_a_project".',
+    ])
+
+    proj_dir = unicode(project_tree.join('not_a_valid_folder'))
+    command_args = ['-p', proj_dir, 'echo', 'Hi', '{name}!']
+    result = cli_runner.invoke(deps_cli.cli, command_args)
+    assert result.exit_code != 0
+    matcher = LineMatcher(result.output.splitlines())
+    matcher.fnmatch_lines([
+        'deps: error: could not find "environment.yml" for "*[\\/]test_projects0[\\/]not_a_valid_folder".',
+    ])
+
+
+def test_execution_on_project_dir(cli_runner, project_tree, monkeypatch):
+    """
+    :type cli_runner: click.testing.CliRunner
+    :type project_tree: py.path.local
+    :type monkeypatch: _pytest.monkeypatch
+    """
+    monkeypatch.chdir(project_tree.join('root_b'))
     command_args = ['-v', '--', 'python', '-c', '"name: {name}"']
     result = cli_runner.invoke(deps_cli.cli, command_args)
     assert result.exit_code == 0
@@ -125,35 +193,36 @@ def test_execution_on_project_dir(cli_runner, project_tree):
         '===============================================================================',
         'dep_z:',
         'deps: executing: python -c "name:\\ dep_z"',
-        'deps: from:      *dep_z',
+        'deps: from:      *[\\/]test_projects0[\\/]dep_z',
         'deps: return code: 0',
         '',
         '===============================================================================',
         'dep_b.1.1:',
         'deps: executing: python -c "name:\\ dep_b.1.1"',
-        'deps: from:      *dep_b.1.1',
+        'deps: from:      *[\\/]test_projects0[\\/]dep_b.1.1',
         'deps: return code: 0',
         '',
         '===============================================================================',
         'dep_b.1:',
         'deps: executing: python -c "name:\\ dep_b.1"',
-        'deps: from:      *dep_b.1',
+        'deps: from:      *[\\/]test_projects0[\\/]dep_b.1',
         'deps: return code: 0',
         '',
         '===============================================================================',
         'root_b:',
         'deps: executing: python -c "name:\\ root_b"',
-        'deps: from:      *root_b',
+        'deps: from:      *[\\/]test_projects0[\\/]root_b',
         'deps: return code: 0',
     ])
 
 
-def test_here_flag(cli_runner, project_tree):
+def test_here_flag(cli_runner, project_tree, monkeypatch):
     """
     :type cli_runner: click.testing.CliRunner
     :type project_tree: py.path.local
+    :type monkeypatch: _pytest.monkeypatch
     """
-    os.chdir(unicode(project_tree.join('root_b')))
+    monkeypatch.chdir(project_tree.join('root_b'))
     command_args = ['-v', '--here', '--', 'python', '-c', '"name: {name}"']
     result = cli_runner.invoke(deps_cli.cli, command_args)
     assert result.exit_code == 0
@@ -222,9 +291,9 @@ def test_script_execution(cli_runner, project_tree, piped_shell_execute):
     matcher.fnmatch_lines([
         '===============================================================================',
         'dep_z:',
-        'deps: executing: tasks?asd dep_z *dep_z',
-        'deps: from:      *dep_z',
-        'Sample script dep_z *dep_z',
+        'deps: executing: tasks[\\/]asd dep_z *[\\/]test_projects0[\\/]dep_z',
+        'deps: from:      *[\\/]test_projects0[\\/]dep_z',
+        'Sample script dep_z *[\\/]test_projects0[\\/]dep_z',
         '',
         'deps: return code: 0',
         '',
@@ -236,9 +305,9 @@ def test_script_execution(cli_runner, project_tree, piped_shell_execute):
         '',
         '===============================================================================',
         'root_b:',
-        'deps: executing: tasks?asd root_b *root_b',
-        'deps: from:      *root_b',
-        'Sample script root_b *root_b',
+        'deps: executing: tasks[\\/]asd root_b *[\\/]test_projects0[\\/]root_b',
+        'deps: from:      *[\\/]test_projects0[\\/]root_b',
+        'Sample script root_b *[\\/]test_projects0[\\/]root_b',
         '',
         'deps: return code: 0',
     ])
@@ -259,8 +328,8 @@ def test_script_return_code(cli_runner, project_tree, piped_shell_execute):
     matcher.fnmatch_lines([
         '===============================================================================',
         'dep_z:',
-        'deps: executing: tasks?does-not-exist dep_z *test_projects0?dep_z',
-        'deps: from:      *test_projects0?dep_z',
+        'deps: executing: tasks[\\/]does-not-exist dep_z *[\\/]test_projects0[\\/]dep_z',
+        'deps: from:      *[\\/]test_projects0[\\/]dep_z',
         'deps: return code: *',
         'deps: error: Command failed',
     ])
@@ -326,49 +395,49 @@ def test_script_execution_fallback(
     matcher.fnmatch_lines([
         '===============================================================================',
         'dep_z:',
-        'deps: executing: tasks?asd dep_z *test_projects0?dep_z',
-        'deps: from:      *test_projects0?dep_z',
-        'Sample script dep_z *test_projects0?dep_z',
+        'deps: executing: tasks[\\/]asd dep_z *[\\/]test_projects0[\\/]dep_z',
+        'deps: from:      *[\\/]test_projects0[\\/]dep_z',
+        'Sample script dep_z *[\\/]test_projects0[\\/]dep_z',
         '',
         'deps: return code: 0',
         '',
         '===============================================================================',
         'dep_a.1.1:',
-        'deps: executing: *test_script_execution_fallback??tasks?asd dep_a.1.1 *test_projects0?dep_a.1.1',
-        'deps: from:      *test_projects0?dep_a.1.1',
-        'Fallback script for asd dep_a.1.1 *test_projects0?dep_a.1.1',
+        'deps: executing: *[\\/]test_script_execution_fallback?[\\/]tasks[\\/]asd dep_a.1.1 *[\\/]test_projects0[\\/]dep_a.1.1',
+        'deps: from:      *[\\/]test_projects0[\\/]dep_a.1.1',
+        'Fallback script for asd dep_a.1.1 *[\\/]test_projects0[\\/]dep_a.1.1',
         '',
         'deps: return code: 0',
         '',
         '===============================================================================',
         'dep_a.1.2:',
-        'deps: executing: *test_script_execution_fallback??tasks?asd dep_a.1.2 *test_projects0?dep_a.1.2',
-        'deps: from:      *test_projects0?dep_a.1.2',
-        'Fallback script for asd dep_a.1.2 *test_projects0?dep_a.1.2',
+        'deps: executing: *[\\/]test_script_execution_fallback?[\\/]tasks[\\/]asd dep_a.1.2 *[\\/]test_projects0[\\/]dep_a.1.2',
+        'deps: from:      *[\\/]test_projects0[\\/]dep_a.1.2',
+        'Fallback script for asd dep_a.1.2 *[\\/]test_projects0[\\/]dep_a.1.2',
         '',
         'deps: return code: 0',
         '',
         '===============================================================================',
         'dep_a.1:',
-        'deps: executing: *test_script_execution_fallback??tasks?asd dep_a.1 *test_projects0?dep_a.1',
-        'deps: from:      *test_projects0?dep_a.1',
-        'Fallback script for asd dep_a.1 *test_projects0?dep_a.1',
+        'deps: executing: *[\\/]test_script_execution_fallback?[\\/]tasks[\\/]asd dep_a.1 *[\\/]test_projects0[\\/]dep_a.1',
+        'deps: from:      *[\\/]test_projects0[\\/]dep_a.1',
+        'Fallback script for asd dep_a.1 *[\\/]test_projects0[\\/]dep_a.1',
         '',
         'deps: return code: 0',
         '',
         '===============================================================================',
         'dep_a.2:',
-        'deps: executing: *test_script_execution_fallback??tasks?asd dep_a.2 *test_projects0?dep_a.2',
-        'deps: from:      *test_projects0?dep_a.2',
-        'Fallback script for asd dep_a.2 *test_projects0?dep_a.2',
+        'deps: executing: *[\\/]test_script_execution_fallback?[\\/]tasks[\\/]asd dep_a.2 *[\\/]test_projects0[\\/]dep_a.2',
+        'deps: from:      *[\\/]test_projects0[\\/]dep_a.2',
+        'Fallback script for asd dep_a.2 *[\\/]test_projects0[\\/]dep_a.2',
         '',
         'deps: return code: 0',
         '',
         '===============================================================================',
         'root_a:',
-        'deps: executing: *test_script_execution_fallback??tasks?asd root_a *test_projects0?root_a',
-        'deps: from:      *test_projects0?root_a',
-        'Fallback script for asd root_a *test_projects0?root_a',
+        'deps: executing: *[\\/]test_script_execution_fallback?[\\/]tasks[\\/]asd root_a *[\\/]test_projects0[\\/]root_a',
+        'deps: from:      *[\\/]test_projects0[\\/]root_a',
+        'Fallback script for asd root_a *[\\/]test_projects0[\\/]root_a',
         '',
         'deps: return code: 0',
     ])

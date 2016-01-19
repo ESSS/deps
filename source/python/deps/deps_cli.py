@@ -150,19 +150,41 @@ def find_directories(raw_directories):
     return directories
 
 
-def is_executable(folders, filename):
+def is_executable_and_get_interpreter(folders, filename):
     """
+    Checks if a file is "executable" and return the interpreter to run the file.
+
+    When no interpreter is required to run the file and empty string is returned, the know files
+    that may require an interpreter are:
+
+    - .py: `sys.executable` is used as interpreter, if python can not determine how it is executed
+        the file is not interpreted as python script and will undergo further heuristics;
+
+    :type folders: sequence(unicode)
     :type filename: unicode
-    :returns: (False, None) if filename is not an executable, or (True, ext), where ext is a suffix
-    to append to the filename to get the executable full name (or '' if it is not needed).
+    :rtype: tuple(bool, unicode)
+    :returns: A tuple indicating if the file is to be considered executable and the interpreter
+    used to run the file. The interpreter could be an empty unicode it the file is not executable
+    or no interpreter is require(or know) to run the file.
     """
+    name, ext = os.path.splitext(filename)
+    if ext == '.py':
+        # Python file.
+        interpreter = sys.executable or ''
+        if interpreter:
+            for folder in folders:
+                fullname = os.path.join(folder, filename)
+
+                if os.path.isfile(fullname):
+                    return True, interpreter
+
     if not sys.platform.startswith('win'):
         # Linux.
         for folder in folders:
             fullname = os.path.join(folder, filename)
 
             if os.path.isfile(fullname) and os.access(fullname, os.X_OK):
-                return True
+                return True, ''
 
     else:
         # Windows.
@@ -170,14 +192,13 @@ def is_executable(folders, filename):
             fullname = os.path.join(folder, filename)
 
             executable_extensions = os.environ['PATHEXT'].lower().split(';')
-            name, ext = os.path.splitext(fullname)
             if os.path.isfile(fullname) and ext.lower() in executable_extensions:
-                return True
+                return True, ''
             for ext in executable_extensions:
                 if os.path.isfile(''.join((fullname, ext))):
-                    return True
+                    return True, ''
 
-    return False
+    return False, ''
 
 
 @click.command(name=PROG_NAME)
@@ -207,7 +228,8 @@ def is_executable(folders, filename):
 @click.option(
     '--fallback-paths', default='', envvar='DEPS_FALLBACK_PATHS',
     help="List of paths, separated by ',' (without spaces) where to look for the executable task if"
-         " it is not found in the project.")
+         " it is not found in the project. Instead of passing this option an enviroment variable"
+         " with the name DEPS_FALLBACK_PATHS can be used.")
 def cli(command, projects, pretty_print, ignore_filter, if_exist, here, dry_run, verbose, fallback_paths):
     # ------------------------------------------------------------------------
     """
@@ -350,7 +372,7 @@ def cli(command, projects, pretty_print, ignore_filter, if_exist, here, dry_run,
     first_command = command[0]
     expanded_first_command = format_command(first_command, first_dep)
 
-    command_must_be_executable = is_executable(
+    command_must_be_executable, interpreter = is_executable_and_get_interpreter(
         [first_working_dir] + fallback_paths,
         expanded_first_command,
     )
@@ -377,15 +399,20 @@ def cli(command, projects, pretty_print, ignore_filter, if_exist, here, dry_run,
 
         formatted_command = format_command(command, dep)
 
+        is_executable, interpreter = is_executable_and_get_interpreter(
+            [dep.abspath], formatted_command[0])
+
         click.secho('\n' + '=' * MAX_LINE_LENGTH, fg='black', bold=True)
         skip = not pass_filter(dep) or (working_dir and not os.path.isdir(working_dir))
         if (
                 not skip and  # Just if not already skipping.
                 command_must_be_executable and
-                not is_executable([dep.abspath], formatted_command[0])  # Will need fallback.
+                not is_executable  # Will need fallback.
         ):
             for fallback in fallback_paths:
-                if is_executable([fallback], formatted_command[0]):
+                is_executable, interpreter = is_executable_and_get_interpreter(
+                    [fallback], formatted_command[0])
+                if is_executable:
                     formatted_command[0] = os.path.join(fallback, formatted_command[0])
                     break
             else:
@@ -395,6 +422,9 @@ def cli(command, projects, pretty_print, ignore_filter, if_exist, here, dry_run,
             continue
         click.secho('{}:'.format(dep.name), fg='cyan', bold=True)
 
+        if interpreter:
+            formatted_command.insert(0, interpreter)
+
         if verbose or dry_run:
             command_to_print = ' '.join(
                 arg.replace(' ', '\\ ') for arg in formatted_command)
@@ -403,15 +433,13 @@ def cli(command, projects, pretty_print, ignore_filter, if_exist, here, dry_run,
                 echo_verbose_msg('from:      ' + working_dir)
 
         if not dry_run:
-            # Note: could use something like this for more robustness:
-            # http://stackoverflow.com/questions/13243807/popen-waiting-for-child-process-even-when-the-immediate-child-has-terminated/13256908#13256908
+            if not sys.platform.startswith('win'):
+                import pipes
+                for index, item in enumerate(formatted_command):
+                    formatted_command[index] = pipes.quote(item)
+                formatted_command = ' '.join(formatted_command)
 
             with cd(working_dir):
-                if not sys.platform.startswith('win'):
-                    import pipes
-                    for index, item in enumerate(formatted_command):
-                        formatted_command[index] = pipes.quote(item)
-                    formatted_command = ' '.join(formatted_command)
                 process = shell_execute(formatted_command)
 
             if verbose:
@@ -432,10 +460,12 @@ def shell_execute(command):
     :rtype: subprocess.Popen
     :return: the process object used to run the command.
     """
+    # Note: could use something like this for more robustness:
+    # http://stackoverflow.com/questions/13243807/popen-waiting-for-child-process-even-when-the-immediate-child-has-terminated/13256908#13256908
     process = subprocess.Popen(command, shell=True)
     process.communicate()
     return process
 
 
 if __name__ == '__main__':
-    cli()
+    cli(auto_envvar_prefix='DEPS')
