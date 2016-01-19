@@ -416,6 +416,9 @@ def cli(command, projects, pretty_print, ignore_filter, if_exist, here, dry_run,
 
             if verbose:
                 echo_verbose_msg('return code: {}'.format(process.returncode))
+            if process.returncode != 0:
+                echo_error('Command failed')
+                sys.exit(process.returncode)
 
 
 def shell_execute(command):

@@ -176,6 +176,28 @@ def test_script_execution(cli_runner, project_tree, piped_shell_execute):
     ])
 
 
+def test_script_return_code(cli_runner, project_tree, piped_shell_execute):
+    """
+    :type cli_runner: click.testing.CliRunner
+    :type project_tree: py.path.local
+    :type piped_shell_execute: mocker.patch
+    """
+    root_b = unicode(project_tree.join('root_b'))
+    task_script = os.path.join('tasks', 'does-not-exist')
+    command_args = ['-p', root_b, '-v', task_script, '{name}', '{abs}']
+    result = cli_runner.invoke(deps_cli.cli, command_args)
+    assert result.exit_code != 0
+    matcher = LineMatcher(result.output.splitlines())
+    matcher.fnmatch_lines([
+        '===============================================================================',
+        'dep_z:',
+        'deps: executing: tasks?does-not-exist dep_z *test_projects0?dep_z',
+        'deps: from:      *test_projects0?dep_z',
+        'deps: return code: *',
+        'deps: error: Command failed',
+    ])
+
+
 
 @pytest.mark.parametrize('use_env_var', [
     True,
