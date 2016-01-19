@@ -156,19 +156,26 @@ def is_executable(folders, filename):
     :returns: (False, None) if filename is not an executable, or (True, ext), where ext is a suffix
     to append to the filename to get the executable full name (or '' if it is not needed).
     """
-    for folder in folders:
-        fullname = os.path.join(folder, filename)
+    if not sys.platform.startswith('win'):
+        # Linux.
+        for folder in folders:
+            fullname = os.path.join(folder, filename)
 
-        if not sys.platform.startswith('win'):
-            return os.path.isfile(fullname) and os.access(fullname, os.X_OK)
-
-        executable_extensions = os.environ['PATHEXT'].lower().split(';')
-        name, ext = os.path.splitext(fullname)
-        if os.path.isfile(fullname) and ext.lower() in executable_extensions:
-            return True
-        for ext in executable_extensions:
-            if os.path.isfile(''.join((fullname, ext))):
+            if os.path.isfile(fullname) and os.access(fullname, os.X_OK):
                 return True
+
+    else:
+        # Windows.
+        for folder in folders:
+            fullname = os.path.join(folder, filename)
+
+            executable_extensions = os.environ['PATHEXT'].lower().split(';')
+            name, ext = os.path.splitext(fullname)
+            if os.path.isfile(fullname) and ext.lower() in executable_extensions:
+                return True
+            for ext in executable_extensions:
+                if os.path.isfile(''.join((fullname, ext))):
+                    return True
 
     return False
 
