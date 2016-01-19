@@ -37,11 +37,12 @@ platform-windows:build_batch_commands:
     set PLATFORM={platform}
     set CONDA_FORCE_32BIT=
     set ESSS_DEBUG=
-    set CONDARC=%WORKSPACE%/{name}/etc/slave_condarc
+    set CONDARC=K:/{name}/etc/slave_condarc
     call conda clean --lock
+    cd /d K:\{name}
     call conda env update --prune
     call activate {name}
-    py.test -l --junit-xml=$WORKSPACE/{name}/build/tests/{name}-pytest.xml
+    py.test -l --junit-xml=K:/{name}/build/tests/{name}-pytest.xml
   
   
 platform-linux:build_shell_commands:
