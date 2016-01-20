@@ -203,7 +203,7 @@ def is_executable_and_get_interpreter(folders, filename):
 
 @click.command(name=PROG_NAME)
 @click.argument('command', nargs=-1)
-@click.version_option('1.0')
+@click.version_option('0.1')
 @click.option(
     '--projects', '-p', default='.',
     help="List of projects, separated by ',' (without spaces).")
