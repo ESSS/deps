@@ -1,0 +1,65 @@
+matrix:
+  platform:
+  - win64,windows
+  - linux64,linux,release
+
+  
+branch_patterns:
+- master
+- fb-.*
+
+
+display_name: "[{branch}] {name} {platform}"
+
+
+branch-fb-.*:notify_stash:
+
+
+git:
+    reference: "$WORKSPACE/../../Shared/ref_repos/{name}"
+
+
+additional_repositories:
+- git:
+    url: "ssh://git@eden.fln.esss.com.br:7999/esss/eden.git"
+    branch: "master"
+    reference: "$WORKSPACE/../../Shared/ref_repos/eden"    
+
+    
+junit_patterns:
+- "**/build/tests/*.xml"
+
+
+timeout: 5
+
+
+label_expression: "{platform} && !12.0"
+
+
+platform-windows:build_batch_commands:
+- |
+    subst /D K:
+    subst K: "%WORKSPACE%"
+    if not "%ERRORLEVEL%" == "0" exit /B 1
+    set PLATFORM={platform}
+    set CONDA_FORCE_32BIT=
+    set ESSS_DEBUG=
+    set CONDARC=K:/{name}/etc/slave_condarc
+    call conda clean --lock
+    cd /d K:\{name}
+    call conda env update --prune
+    call activate {name}
+    py.test -l --junit-xml=K:/{name}/build/tests/{name}-pytest.xml
+  
+  
+platform-linux:build_shell_commands:
+- |
+    $WORKSPACE/eden/bin/run-chroot-command bash -c "
+        export PATH=$HOME/Work/miniconda/bin:$PATH
+        cd $WORKSPACE/{name}
+        conda env update --prune
+        source activate {name}
+        py.test -l --junit-xml=$WORKSPACE/{name}/build/tests/{name}-pytest.xml
+    "
+
+

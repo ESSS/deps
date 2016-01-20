@@ -1,0 +1,18 @@
+channels:
+ - https://esss:85ee7de9d291a89ae6cd839fd55d7a5a6e0e1244@eden.esss.com.br/conda-channel/esss
+ - https://esss:85ee7de9d291a89ae6cd839fd55d7a5a6e0e1244@eden.esss.com.br/conda-channel/mirror
+
+show_channel_urls: True
+
+always_yes: True
+
+use_pip: False
+
+disallow:
+ - anaconda
+
+allow_softlinks: False
+
+create_default_packages:
+ - python
+ - pip

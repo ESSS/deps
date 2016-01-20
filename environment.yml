@@ -1,0 +1,15 @@
+name: deps
+
+dependencies:
+  - click
+  - colorama
+  - pytest-mock
+  - jinja2
+  - pyyaml
+
+environment:
+  - PYTHONPATH:
+    - {{ os.path.join(root, 'source', 'python') }}
+
+  - PATH:
+    - {{ os.path.join(root, 'bin') }}
