@@ -127,7 +127,7 @@ def test_interpreter_awareness(cli_runner, project_tree, piped_shell_execute):
     matcher.fnmatch_lines([
         '===============================================================================',
         'dep_z:',
-        'deps: executing: *[\\/]python.exe tasks[\\/]py_get_cwd.py dep_z',
+        'deps: executing: *[\\/]python* tasks[\\/]py_get_cwd.py dep_z',
         'deps: from:      *[\\/]test_projects0[\\/]dep_z',
         'From python script!',
         ' - sys.argv[1:]: [\'dep_z\'];',
@@ -143,7 +143,7 @@ def test_interpreter_awareness(cli_runner, project_tree, piped_shell_execute):
         '',
         '===============================================================================',
         'root_b:',
-        'deps: executing: *[\\/]python.exe tasks[\\/]py_get_cwd.py root_b',
+        'deps: executing: *[\\/]python* tasks[\\/]py_get_cwd.py root_b',
         'deps: from:      *[\\/]test_projects0[\\/]root_b',
         'From python script!',
         ' - sys.argv[1:]: [\'root_b\'];',
