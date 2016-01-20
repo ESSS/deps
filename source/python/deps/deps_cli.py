@@ -467,5 +467,13 @@ def shell_execute(command):
     return process
 
 
+def main_func():
+    """
+    A wrapper to call the click command with the desired parameters.
+    """
+    return cli(auto_envvar_prefix='DEPS')
+
+
 if __name__ == '__main__':
-    cli(auto_envvar_prefix='DEPS')
+    sys.exit(main_func())
+
