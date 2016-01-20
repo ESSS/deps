@@ -19,6 +19,13 @@ git:
     reference: "$WORKSPACE/../../Shared/ref_repos/{name}"
 
 
+additional_repositories:
+- git:
+    url: "ssh://git@eden.fln.esss.com.br:7999/esss/eden.git"
+    branch: "master"
+    reference: "$WORKSPACE/../../Shared/ref_repos/eden"    
+
+    
 junit_patterns:
 - "**/build/tests/*.xml"
 
@@ -47,10 +54,12 @@ platform-windows:build_batch_commands:
   
 platform-linux:build_shell_commands:
 - |
-    export PATH=$HOME/Work/miniconda/bin:$PATH
-    cd $WORKSPACE/{name}
-    conda env update --prune
-    source activate {name}
-    py.test -l --junit-xml=$WORKSPACE/{name}/build/tests/{name}-pytest.xml
+    $WORKSPACE/eden/bin/run-chroot-command bash -c "
+        export PATH=$HOME/Work/miniconda/bin:$PATH
+        cd $WORKSPACE/{name}
+        conda env update --prune
+        source activate {name}
+        py.test -l --junit-xml=$WORKSPACE/{name}/build/tests/{name}-pytest.xml
+    "
 
 
