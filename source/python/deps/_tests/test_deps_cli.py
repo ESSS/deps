@@ -442,3 +442,64 @@ def test_script_execution_fallback(
         'deps: return code: 0',
     ])
 
+
+@pytest.mark.parametrize('use_env_var', [
+    True,
+    False,
+])
+def test_ignore_projects(
+    use_env_var,
+    cli_runner,
+    project_tree,
+    piped_shell_execute,
+):
+    """
+    :type use_env_var: bool
+    :type cli_runner: click.testing.CliRunner
+    :type project_tree: py.path.local
+    :type piped_shell_execute: mocker.patch
+    """
+    def configure_ignored_projects():
+        if use_env_var:
+            extra_env[b'DEPS_IGNORE_PROJECTS'] = b'dep_a.1,dep_z'
+        else:
+            command_args.insert(0, '--ignore-projects=dep_a.1,dep_z')
+    root_a = unicode(project_tree.join('root_a'))
+    # Prepare the invocation.
+    command_args = ['-p', root_a, 'echo', 'test', '{name}']
+    extra_env = {}
+    configure_ignored_projects()
+
+    result = cli_runner.invoke(deps_cli.cli, command_args, env=extra_env)
+    assert result.exit_code == 0
+    matcher = LineMatcher(result.output.splitlines())
+    matcher.fnmatch_lines([
+        '===============================================================================',
+        'dep_a.1: ignored',
+        '',
+        '===============================================================================',
+        'dep_z: ignored',
+        '',
+        '===============================================================================',
+        'dep_a.2:',
+        'test dep_a.2',
+        '',
+        '===============================================================================',
+        'root_a:',
+        'test root_a',
+    ])
+
+    # Prepare the invocation.
+    command_args = ['-p', root_a]
+    extra_env = {}
+    configure_ignored_projects()
+
+    result = cli_runner.invoke(deps_cli.cli, command_args, env=extra_env)
+    assert result.exit_code == 0
+    assert result.output == textwrap.dedent(
+        '''\
+        dep_a.2
+        root_a
+        '''
+    )
+
