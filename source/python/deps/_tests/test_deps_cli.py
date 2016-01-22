@@ -346,7 +346,6 @@ def test_script_execution_fallback(
     project_tree,
     piped_shell_execute,
     tmpdir,
-    mocker,
 ):
     """
     :type use_env_var: bool
@@ -354,7 +353,6 @@ def test_script_execution_fallback(
     :type project_tree: py.path.local
     :type piped_shell_execute: mocker.patch
     :type tmpdir: py.path.local
-    :type mocker: mocker
     """
     # Create a fallback.
     batch_script = textwrap.dedent(
@@ -381,15 +379,14 @@ def test_script_execution_fallback(
     task_script = os.path.join('tasks', 'asd')
     command_args = ['-p', root_a, '-v', task_script, '{name}', '{abs}']
     # Configure the fallback path.
+    extra_env = {}
     if use_env_var:
         encoding = sys.getfilesystemencoding()
-        env_values = {b'DEPS_FALLBACK_PATHS': unicode(tmpdir).encode(encoding)}
-        mocker.patch.dict('os.environ', env_values)
+        extra_env[b'DEPS_FALLBACK_PATHS'] = unicode(tmpdir).encode(encoding)
     else:
-        command_args.insert(0, '--fallback-paths')
-        command_args.insert(1, unicode(tmpdir))
+        command_args.insert(0, '--fallback-paths={}'.format(unicode(tmpdir)))
 
-    result = cli_runner.invoke(deps_cli.cli, command_args)
+    result = cli_runner.invoke(deps_cli.cli, command_args, env=extra_env)
     assert result.exit_code == 0
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
