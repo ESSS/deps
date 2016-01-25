@@ -7,6 +7,7 @@ import io
 import os
 import subprocess
 import sys
+import textwrap
 
 
 PROG_NAME = 'deps'
@@ -82,19 +83,23 @@ def get_shallow_dependencies_directories(base_directory):
 # ==================================================================================================
 # Common code
 # ==================================================================================================
-Dep = namedtuple('Dep', 'name,abspath,deps')
+Dep = namedtuple('Dep', 'name,abspath,deps,ignored')
 
 
-def create_new_dep_from_directory(directory):
+def create_new_dep_from_directory(directory, ignore_projects):
     """
     :param unicode directory: root directory of a project
+    :param list(unicode) ignore_projects: a list of project names to ignore (set the `ignored` attr
+    to `True`.)
     :rtype: Dep
     """
     directory = os.path.abspath(directory)
+    name=os.path.split(directory)[1]
     return Dep(
-        name=os.path.split(directory)[1],
+        name=name,
         abspath=directory,
         deps=[],
+        ignored=name in ignore_projects,
     )
 
 
@@ -203,7 +208,7 @@ def is_executable_and_get_interpreter(folders, filename):
 
 @click.command(name=PROG_NAME)
 @click.argument('command', nargs=-1)
-@click.version_option('0.1')
+@click.version_option('0.2')
 @click.option(
     '--projects', '-p', default='.',
     help="List of projects, separated by ',' (without spaces).")
@@ -228,10 +233,25 @@ def is_executable_and_get_interpreter(folders, filename):
 @click.option(
     '--fallback-paths', default='', envvar='DEPS_FALLBACK_PATHS',
     help="List of paths, separated by ',' (without spaces) where to look for the executable task if"
-         " it is not found in the project. Instead of passing this option an enviroment variable"
+         " it is not found in the project. Instead of passing this option an environment variable"
          " with the name DEPS_FALLBACK_PATHS can be used.")
-def cli(command, projects, pretty_print, ignore_filter, if_exist, here, dry_run, verbose, fallback_paths):
-    # ------------------------------------------------------------------------
+@click.option(
+    '--ignore-projects', default='', envvar='DEPS_IGNORE_PROJECTS',
+    help="List of project names, separated by ',' (without spaces), of projects to ignore when"
+         " looking for dependencies and will not recurse into those projects. Instead of passing"
+         " this option an environment variable with the name DEPS_IGNORE_PROJECTS can be used.")
+def cli(
+    command,
+    projects,
+    pretty_print,
+    ignore_filter,
+    if_exist,
+    here,
+    dry_run,
+    verbose,
+    fallback_paths,
+    ignore_projects,
+):
     """
     Program to list dependencies of a project, or to execute a command for
     each dependency.
@@ -265,9 +285,19 @@ def cli(command, projects, pretty_print, ignore_filter, if_exist, here, dry_run,
       relative to the current directory, it will automatically skip
       dependencies that do not have this file inside.
     """
-    # ------------------------------------------------------------------------
-    directories = find_directories(projects.split(','))
-    fallback_paths = fallback_paths.split(',') if len(fallback_paths) > 0 else []
+    # Parse arguments that are lists.
+    def get_list_from_argument(value, separator):
+        """
+        :type value: unicode
+        :type separator: unicode
+        :rtype: list(unicode)
+        :return: The list obtained from `value` (can be empty if `value` is empty).
+        """
+        return value.split(',') if len(separator) > 0 else []
+
+    directories = find_directories(get_list_from_argument(projects, ','))
+    fallback_paths = get_list_from_argument(fallback_paths, ',')
+    ignore_projects = get_list_from_argument(ignore_projects, ',')
 
     # find dependencies recursively for each directory
     # (if we ever need something fancier, there is "pycosat" or "networkx" to solve this stuff)
@@ -283,11 +313,12 @@ def cli(command, projects, pretty_print, ignore_filter, if_exist, here, dry_run,
         """
         for dep_directory in directories:
             if dep_directory not in all_deps:
-                dep = create_new_dep_from_directory(dep_directory)
+                dep = create_new_dep_from_directory(dep_directory, ignore_projects)
                 all_deps[dep_directory] = dep
-                current_dep_directories = get_shallow_dependencies_directories(
-                    dep_directory)
-                add_deps_from_directories(current_dep_directories, dep.deps)
+                if not dep.ignored:
+                    current_dep_directories = get_shallow_dependencies_directories(
+                        dep_directory)
+                    add_deps_from_directories(current_dep_directories, dep.deps)
             else:
                 dep = all_deps[dep_directory]
             list_to_add_deps.append(dep)
@@ -298,14 +329,29 @@ def cli(command, projects, pretty_print, ignore_filter, if_exist, here, dry_run,
     if pretty_print:
         already_printed = set()
 
-        def print_deps(dep_list, indentation=0):
+        legend = textwrap.dedent('''\
+            # - project_name: listed or target of command execution;
+            # - (project_name): have already been printed in the tree;
+            # - <project_name>: have been ignored (see `--ignored-projects` option);
+        ''')
+        print(legend)
+
+        def print_formatted_dep(name, identation, name_template='{}'):
+            print(identation + name_template.format(name))
+
+        def print_deps(dep_list, indentation_size=0, indentation_string='    '):
+            indentation = indentation_string * indentation_size
+            next_indentation_size = indentation_size + 1
             for dep in dep_list:
+                if dep.ignored:
+                    print_formatted_dep(dep.name, indentation, '<{}>')
+                    continue
                 if dep.abspath not in already_printed:
-                    print(' ' * (indentation * 2) + dep.name)
+                    print_formatted_dep(dep.name, indentation)
                     already_printed.add(dep.abspath)
-                    print_deps(dep.deps, indentation + 1)
+                    print_deps(dep.deps, next_indentation_size, indentation_string)
                 else:
-                    print(' ' * (indentation * 2) + '(' + dep.name + ')')
+                    print_formatted_dep(dep.name, indentation, '({})')
         print_deps(root_deps)
         sys.exit(0)
 
@@ -329,7 +375,7 @@ def cli(command, projects, pretty_print, ignore_filter, if_exist, here, dry_run,
     walk_deps(root_deps)
 
     if not command:
-        print('\n'.join(dep.name for dep in deps_in_order))
+        print('\n'.join(dep.name for dep in deps_in_order if not dep.ignored))
         sys.exit(0)
 
     #=========================================================================
@@ -393,6 +439,11 @@ def cli(command, projects, pretty_print, ignore_filter, if_exist, here, dry_run,
 
     # execute command for each dependency
     for dep in deps_in_order:
+        click.secho('\n' + '=' * MAX_LINE_LENGTH, fg='black', bold=True)
+        if dep.ignored:
+            click.secho('{}: ignored'.format(dep.name), fg='cyan')
+            continue
+
         working_dir = None
         if not here:
             working_dir = dep.abspath
@@ -402,7 +453,6 @@ def cli(command, projects, pretty_print, ignore_filter, if_exist, here, dry_run,
         is_executable, interpreter = is_executable_and_get_interpreter(
             [dep.abspath], formatted_command[0])
 
-        click.secho('\n' + '=' * MAX_LINE_LENGTH, fg='black', bold=True)
         skip = not pass_filter(dep) or (working_dir and not os.path.isdir(working_dir))
         if (
                 not skip and  # Just if not already skipping.
