@@ -55,11 +55,11 @@ def project_tree(tmpdir_factory):
         import os
         import sys
         print "From python script!"
-        print " - sys.argv[1:]: {};".format(sys.argv[1:])
+        print " - sys.argv: {};".format(' '.join(sys.argv[1:]))
         print " - cwd: {};".format(os.getcwd())
         '''
     )
-    for proj in ['root_b', 'dep_z']:
+    for proj in ['root_a', 'root_b', 'dep_z']:
         tasks_dir = test_projects.join(proj).mkdir('tasks')
         script_file = tasks_dir.join('asd.bat')
         script_file.write(batch_script)
@@ -70,7 +70,7 @@ def project_tree(tmpdir_factory):
         st = os.stat(script_file)
         os.chmod(script_file, st.st_mode | stat.S_IEXEC)
 
-        script_file = tasks_dir.join('py_get_cwd.py')
+        script_file = tasks_dir.join('asd.py')
         script_file.write(python_script)
 
     return test_projects
@@ -119,7 +119,7 @@ def test_interpreter_awareness(cli_runner, project_tree, piped_shell_execute):
     :type piped_shell_execute: mocker.patch
     """
     root_b = unicode(project_tree.join('root_b'))
-    task_script = os.path.join('tasks', 'py_get_cwd.py')
+    task_script = os.path.join('tasks', 'asd')
     command_args = ['-p', root_b, '-v', task_script, '{name}']
     result = cli_runner.invoke(deps_cli.cli, command_args)
     assert result.exit_code == 0
@@ -127,10 +127,10 @@ def test_interpreter_awareness(cli_runner, project_tree, piped_shell_execute):
     matcher.fnmatch_lines([
         '===============================================================================',
         'dep_z:',
-        'deps: executing: *[\\/]python* tasks[\\/]py_get_cwd.py dep_z',
+        'deps: executing: *[\\/]python* tasks[\\/]asd.py dep_z',
         'deps: from:      *[\\/]test_projects0[\\/]dep_z',
         'From python script!',
-        ' - sys.argv[1:]: [\'dep_z\'];',
+        ' - sys.argv: dep_z;',
         ' - cwd: *[\\/]test_projects0[\\/]dep_z;',
         '',
         'deps: return code: 0',
@@ -143,10 +143,10 @@ def test_interpreter_awareness(cli_runner, project_tree, piped_shell_execute):
         '',
         '===============================================================================',
         'root_b:',
-        'deps: executing: *[\\/]python* tasks[\\/]py_get_cwd.py root_b',
+        'deps: executing: *[\\/]python* tasks[\\/]asd.py root_b',
         'deps: from:      *[\\/]test_projects0[\\/]root_b',
         'From python script!',
-        ' - sys.argv[1:]: [\'root_b\'];',
+        ' - sys.argv: root_b;',
         ' - cwd: *[\\/]test_projects0[\\/]root_b;',
         '',
         'deps: return code: 0',
@@ -291,9 +291,11 @@ def test_script_execution(cli_runner, project_tree, piped_shell_execute):
     matcher.fnmatch_lines([
         '===============================================================================',
         'dep_z:',
-        'deps: executing: tasks[\\/]asd dep_z *[\\/]test_projects0[\\/]dep_z',
+        'deps: executing: *[\\/]python* tasks[\\/]asd.py dep_z *[\\/]test_projects0[\\/]dep_z',
         'deps: from:      *[\\/]test_projects0[\\/]dep_z',
-        'Sample script dep_z *[\\/]test_projects0[\\/]dep_z',
+        'From python script!',
+        ' - sys.argv: dep_z *[\\/]test_projects0[\\/]dep_z;',
+        ' - cwd: *[\\/]test_projects0[\\/]dep_z;',
         '',
         'deps: return code: 0',
         '',
@@ -305,9 +307,11 @@ def test_script_execution(cli_runner, project_tree, piped_shell_execute):
         '',
         '===============================================================================',
         'root_b:',
-        'deps: executing: tasks[\\/]asd root_b *[\\/]test_projects0[\\/]root_b',
+        'deps: executing: *[\\/]python* tasks[\\/]asd.py root_b *[\\/]test_projects0[\\/]root_b',
         'deps: from:      *[\\/]test_projects0[\\/]root_b',
-        'Sample script root_b *[\\/]test_projects0[\\/]root_b',
+        'From python script!',
+        ' - sys.argv: root_b *[\\/]test_projects0[\\/]root_b;',
+        ' - cwd: *[\\/]test_projects0[\\/]root_b;',
         '',
         'deps: return code: 0',
     ])
@@ -392,15 +396,17 @@ def test_script_execution_fallback(
     matcher.fnmatch_lines([
         '===============================================================================',
         'dep_z:',
-        'deps: executing: tasks[\\/]asd dep_z *[\\/]test_projects0[\\/]dep_z',
+        'deps: executing: *[\\/]python* tasks[\\/]asd.py dep_z *[\\/]test_projects0[\\/]dep_z',
         'deps: from:      *[\\/]test_projects0[\\/]dep_z',
-        'Sample script dep_z *[\\/]test_projects0[\\/]dep_z',
+        'From python script!',
+        ' - sys.argv: dep_z *[\\/]test_projects0[\\/]dep_z;',
+        ' - cwd: *[\\/]test_projects0[\\/]dep_z;',
         '',
         'deps: return code: 0',
         '',
         '===============================================================================',
         'dep_a.1.1:',
-        'deps: executing: *[\\/]test_script_execution_fallback?[\\/]tasks[\\/]asd dep_a.1.1 *[\\/]test_projects0[\\/]dep_a.1.1',
+        'deps: executing: *[\\/]test_script_execution_fallback?[\\/]tasks[\\/]asd* dep_a.1.1 *[\\/]test_projects0[\\/]dep_a.1.1',
         'deps: from:      *[\\/]test_projects0[\\/]dep_a.1.1',
         'Fallback script for asd dep_a.1.1 *[\\/]test_projects0[\\/]dep_a.1.1',
         '',
@@ -408,7 +414,7 @@ def test_script_execution_fallback(
         '',
         '===============================================================================',
         'dep_a.1.2:',
-        'deps: executing: *[\\/]test_script_execution_fallback?[\\/]tasks[\\/]asd dep_a.1.2 *[\\/]test_projects0[\\/]dep_a.1.2',
+        'deps: executing: *[\\/]test_script_execution_fallback?[\\/]tasks[\\/]asd* dep_a.1.2 *[\\/]test_projects0[\\/]dep_a.1.2',
         'deps: from:      *[\\/]test_projects0[\\/]dep_a.1.2',
         'Fallback script for asd dep_a.1.2 *[\\/]test_projects0[\\/]dep_a.1.2',
         '',
@@ -416,7 +422,7 @@ def test_script_execution_fallback(
         '',
         '===============================================================================',
         'dep_a.1:',
-        'deps: executing: *[\\/]test_script_execution_fallback?[\\/]tasks[\\/]asd dep_a.1 *[\\/]test_projects0[\\/]dep_a.1',
+        'deps: executing: *[\\/]test_script_execution_fallback?[\\/]tasks[\\/]asd* dep_a.1 *[\\/]test_projects0[\\/]dep_a.1',
         'deps: from:      *[\\/]test_projects0[\\/]dep_a.1',
         'Fallback script for asd dep_a.1 *[\\/]test_projects0[\\/]dep_a.1',
         '',
@@ -424,7 +430,7 @@ def test_script_execution_fallback(
         '',
         '===============================================================================',
         'dep_a.2:',
-        'deps: executing: *[\\/]test_script_execution_fallback?[\\/]tasks[\\/]asd dep_a.2 *[\\/]test_projects0[\\/]dep_a.2',
+        'deps: executing: *[\\/]test_script_execution_fallback?[\\/]tasks[\\/]asd* dep_a.2 *[\\/]test_projects0[\\/]dep_a.2',
         'deps: from:      *[\\/]test_projects0[\\/]dep_a.2',
         'Fallback script for asd dep_a.2 *[\\/]test_projects0[\\/]dep_a.2',
         '',
@@ -432,9 +438,11 @@ def test_script_execution_fallback(
         '',
         '===============================================================================',
         'root_a:',
-        'deps: executing: *[\\/]test_script_execution_fallback?[\\/]tasks[\\/]asd root_a *[\\/]test_projects0[\\/]root_a',
+        'deps: executing: *[\\/]python* tasks[\\/]asd.py root_a *[\\/]test_projects0[\\/]root_a',
         'deps: from:      *[\\/]test_projects0[\\/]root_a',
-        'Fallback script for asd root_a *[\\/]test_projects0[\\/]root_a',
+        'From python script!',
+        ' - sys.argv: root_a *[\\/]test_projects0[\\/]root_a;',
+        ' - cwd: *[\\/]test_projects0[\\/]root_a;',
         '',
         'deps: return code: 0',
     ])
