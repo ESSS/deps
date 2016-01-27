@@ -167,43 +167,55 @@ def is_executable_and_get_interpreter(folders, filename):
 
     :type folders: sequence(unicode)
     :type filename: unicode
-    :rtype: tuple(bool, unicode)
+    :rtype: tuple(bool, unicode, unicode)
     :returns: A tuple indicating if the file is to be considered executable and the interpreter
     used to run the file. The interpreter could be an empty unicode it the file is not executable
-    or no interpreter is require(or know) to run the file.
+    or no interpreter is required(or know) to run the file and the full filename used to run the
+    file.
     """
-    name, ext = os.path.splitext(filename)
-    if ext == '.py':
-        # Python file.
-        interpreter = sys.executable or ''
-        if interpreter:
-            for folder in folders:
-                fullname = os.path.join(folder, filename)
+    def python_script_filter(folder_, filename_):
+        name_, ext_ = os.path.splitext(filename_)
+        if ext_ != '.py':
+            filename_ += '.py'
+        interpreter_ = sys.executable or ''
+        if interpreter_:
+            fullname_ = os.path.join(folder_, filename_)
+            if os.path.isfile(fullname_):
+                return interpreter_, filename_
+        return None
 
-                if os.path.isfile(fullname):
-                    return True, interpreter
+    script_filters = [python_script_filter]
 
     if not sys.platform.startswith('win'):
         # Linux.
         for folder in folders:
-            fullname = os.path.join(folder, filename)
-
-            if os.path.isfile(fullname) and os.access(fullname, os.X_OK):
-                return True, ''
-
+            for script_filter in script_filters:  # Check for a script in folder.
+                interpreter_filename = script_filter(folder, filename)
+                if interpreter_filename is not None:
+                    return (True,) + interpreter_filename
+            else:  # Check for default linux executable.
+                fullname = os.path.join(folder, filename)
+                if os.path.isfile(fullname) and os.access(fullname, os.X_OK):
+                    return True, '', fullname
     else:
         # Windows.
         for folder in folders:
-            fullname = os.path.join(folder, filename)
+            for script_filter in script_filters:  # Check for script in folder.
+                interpreter_filename = script_filter(folder, filename)
+                if interpreter_filename is not None:
+                    return (True,) + interpreter_filename
+            else:  # Check for default windows executable.
+                fullname = os.path.join(folder, filename)
+                name, ext = os.path.splitext(fullname)
+                executable_extensions = os.environ['PATHEXT'].lower().split(';')
+                if os.path.isfile(fullname) and ext.lower() in executable_extensions:
+                    return True, '', fullname
+                for ext in executable_extensions:
+                    fullname_ext = ''.join((fullname, ext))
+                    if os.path.isfile(fullname_ext):
+                        return True, '', fullname_ext
 
-            executable_extensions = os.environ['PATHEXT'].lower().split(';')
-            if os.path.isfile(fullname) and ext.lower() in executable_extensions:
-                return True, ''
-            for ext in executable_extensions:
-                if os.path.isfile(''.join((fullname, ext))):
-                    return True, ''
-
-    return False, ''
+    return False, '', ''
 
 
 @click.command(name=PROG_NAME)
@@ -418,10 +430,10 @@ def cli(
     first_command = command[0]
     expanded_first_command = format_command(first_command, first_dep)
 
-    command_must_be_executable, interpreter = is_executable_and_get_interpreter(
+    command_must_be_executable = is_executable_and_get_interpreter(
         [first_working_dir] + fallback_paths,
         expanded_first_command,
-    )
+    )[0]
     if ignore_filter:
         command_must_be_executable = False
         filter_if_exist = []
@@ -450,7 +462,7 @@ def cli(
 
         formatted_command = format_command(command, dep)
 
-        is_executable, interpreter = is_executable_and_get_interpreter(
+        is_executable, interpreter, filename = is_executable_and_get_interpreter(
             [dep.abspath], formatted_command[0])
 
         skip = not pass_filter(dep) or (working_dir and not os.path.isdir(working_dir))
@@ -460,10 +472,9 @@ def cli(
                 not is_executable  # Will need fallback.
         ):
             for fallback in fallback_paths:
-                is_executable, interpreter = is_executable_and_get_interpreter(
+                is_executable, interpreter, filename = is_executable_and_get_interpreter(
                     [fallback], formatted_command[0])
                 if is_executable:
-                    formatted_command[0] = os.path.join(fallback, formatted_command[0])
                     break
             else:
                 skip = True  # No fallback found, skip.
@@ -472,6 +483,8 @@ def cli(
             continue
         click.secho('{}:'.format(dep.name), fg='cyan', bold=True)
 
+        if is_executable:
+            formatted_command[0] = filename
         if interpreter:
             formatted_command.insert(0, interpreter)
 
