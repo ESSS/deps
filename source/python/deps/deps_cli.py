@@ -288,6 +288,9 @@ def cli(
 
           deps [parameters] <command>
 
+      To prevent deps to process any option or flags passed to command a "--" can be used
+          deps [parameters] -- <command> --with --flags
+
         \b
         <command> may contain some variables:
           * {name}: The dependency bare name (ex.: eden)
@@ -296,6 +299,12 @@ def cli(
       Note that if the first command word is an existing executable file
       relative to the current directory, it will automatically skip
       dependencies that do not have this file inside.
+
+    If the option --if-exist is used dependencies not having a file named as this relative to the
+    given dependency root directory are skipped:
+
+          deps --if-exists Makefile -- make clean
+
     """
     # Parse arguments that are lists.
     def get_list_from_argument(value, separator):
@@ -305,7 +314,7 @@ def cli(
         :rtype: list(unicode)
         :return: The list obtained from `value` (can be empty if `value` is empty).
         """
-        return value.split(',') if len(separator) > 0 else []
+        return value.split(',') if len(value) > 0 else []
 
     directories = find_directories(get_list_from_argument(projects, ','))
     fallback_paths = get_list_from_argument(fallback_paths, ',')
