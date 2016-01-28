@@ -232,7 +232,7 @@ def is_executable_and_get_interpreter(folders, filename):
     '--pretty-print', '-pp', is_flag=True,
     help='Pretty print dependencies in a tree.')
 @click.option(
-    '--if-exist', '-f', multiple=True,
+    '--require-file', '-f', multiple=True,
     help='Only run the command if the file exists (relative to dependency working directory).')
 @click.option(
     '--here', is_flag=True,
@@ -257,7 +257,7 @@ def cli(
     command,
     projects,
     pretty_print,
-    if_exist,
+    require_file,
     here,
     dry_run,
     verbose,
@@ -300,10 +300,10 @@ def cli(
       relative to the current directory, it will automatically skip
       dependencies that do not have this file inside.
 
-    If the option --if-exist is used dependencies not having a file named as this relative to the
+    If the option --require-file is used dependencies not having a file named as this relative to the
     given dependency root directory are skipped:
 
-          deps --if-exists Makefile -- make clean
+          deps --require-file Makefile -- make clean
 
     """
     # Parse arguments that are lists.
@@ -403,10 +403,6 @@ def cli(
     # execution
     #=========================================================================
 
-    filter_if_exist = []
-    if if_exist:
-        filter_if_exist.extend(if_exist)
-
     def format_command(command, dep):
         """
         Process the variables in command.
@@ -449,7 +445,7 @@ def cli(
         :type dep: Dep
         :return: `True` if the necessary files/folders are present, `False` otherwise.
         """
-        for f in filter_if_exist:
+        for f in require_file:
             file_to_check = os.path.join(dep.abspath, format_command(f, dep))
             if not os.path.isfile(file_to_check) and not os.path.isdir(file_to_check):
                 return False
