@@ -169,9 +169,8 @@ def is_executable_and_get_interpreter(folders, filename):
     :type filename: unicode
     :rtype: tuple(bool, unicode, unicode)
     :returns: A tuple indicating if the file is to be considered executable and the interpreter
-    used to run the file. The interpreter could be an empty unicode it the file is not executable
-    or no interpreter is required(or know) to run the file and the full filename used to run the
-    file.
+    used to run the file and the full filename to run the file. The interpreter could be an empty
+    unicode if the file is not executable or no interpreter is required (or known).
     """
     def python_script_filter(folder_, filename_):
         name_, ext_ = os.path.splitext(filename_)
@@ -181,40 +180,45 @@ def is_executable_and_get_interpreter(folders, filename):
         if interpreter_:
             fullname_ = os.path.join(folder_, filename_)
             if os.path.isfile(fullname_):
-                return interpreter_, filename_
-        return None
+                return interpreter_, fullname_
+        return None, None
 
     script_filters = [python_script_filter]
 
-    if not sys.platform.startswith('win'):
-        # Linux.
-        for folder in folders:
-            for script_filter in script_filters:  # Check for a script in folder.
-                interpreter_filename = script_filter(folder, filename)
-                if interpreter_filename is not None:
-                    return (True,) + interpreter_filename
-            else:  # Check for default linux executable.
-                fullname = os.path.join(folder, filename)
-                if os.path.isfile(fullname) and os.access(fullname, os.X_OK):
-                    return True, '', fullname
-    else:
-        # Windows.
-        for folder in folders:
-            for script_filter in script_filters:  # Check for script in folder.
-                interpreter_filename = script_filter(folder, filename)
-                if interpreter_filename is not None:
-                    return (True,) + interpreter_filename
-            else:  # Check for default windows executable.
-                fullname = os.path.join(folder, filename)
-                name, ext = os.path.splitext(fullname)
-                executable_extensions = os.environ['PATHEXT'].lower().split(';')
-                if os.path.isfile(fullname) and ext.lower() in executable_extensions:
-                    return True, '', fullname
-                for ext in executable_extensions:
-                    fullname_ext = ''.join((fullname, ext))
-                    if os.path.isfile(fullname_ext):
-                        return True, '', fullname_ext
+    def linux_executable_filter(folder_, filename_):
+        # Check for default linux executable. No interpreter needed.
+        fullname_ = os.path.join(folder_, filename_)
+        if os.path.isfile(fullname_) and os.access(fullname_, os.X_OK):
+            return '', fullname_
+        return None, None
 
+    def windows_executable_filter(folder_, filename_):
+        # Check for default windows executable. No interpreter needed.
+        fullname_ = os.path.join(folder_, filename_)
+        name_, ext_ = os.path.splitext(fullname_)
+        executable_extensions_ = os.environ['PATHEXT'].lower().split(';')
+        if os.path.isfile(fullname_) and ext_.lower() in executable_extensions_:
+            return '', fullname_
+        for ext_ in executable_extensions_:
+            fullname_ext_ = ''.join((fullname_, ext_))
+            if os.path.isfile(fullname_ext_):
+                return '', fullname_ext_
+        return None, None
+
+    if sys.platform.startswith('win'):
+        is_executable_filter = windows_executable_filter
+    else:
+        is_executable_filter = linux_executable_filter
+
+    for folder in folders:
+        for script_filter in script_filters:
+            interpreter, fullname = script_filter(folder, filename)
+            if interpreter is not None:
+                break
+        else:
+            interpreter, fullname = is_executable_filter(folder, filename)
+        if interpreter is not None:
+            return True, interpreter, fullname
     return False, '', ''
 
 
