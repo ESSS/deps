@@ -159,7 +159,7 @@ def is_executable_and_get_interpreter(folders, filename):
     """
     Checks if a file is "executable" and return the interpreter to run the file.
 
-    When no interpreter is required to run the file and empty string is returned, the know files
+    When no interpreter is required to run the file and empty string is returned, the known files
     that may require an interpreter are:
 
     - .py: `sys.executable` is used as interpreter, if python can not determine how it is executed
@@ -306,8 +306,9 @@ def cli(
 
           deps --require-file Makefile -- make clean
 
-    List options should be passed as a list separated by "," or ";" or ":" (with out spaces, if
-    spaces are required the value must be properly escaped as if must be a single argument):
+    List options should be passed as a list separated by "," or the system path separator (without
+    spaces, if spaces are required the value must be properly escaped as if must be a single
+    argument):
 
       \b
         deps -p my_project,cool_project
@@ -316,103 +317,40 @@ def cli(
 
     """
     # Parse arguments that are lists.
-    def get_list_from_argument(value, separator):
+    def get_list_from_argument(value):
         """
         :type value: unicode
         :type separator: unicode
         :rtype: list(unicode)
         :return: The list obtained from `value` (can be empty if `value` is empty).
         """
-        return value.split(',') if len(value) > 0 else []
+        import re
+        item_pattern = '[^,{}]+'.format(os.pathsep)
+        return re.findall(item_pattern, value)
 
-    directories = find_directories(get_list_from_argument(projects, ','))
-    fallback_paths = get_list_from_argument(fallback_paths, ',')
-    ignore_projects = get_list_from_argument(ignore_projects, ',')
+    directories = find_directories(get_list_from_argument(projects))
+    fallback_paths = get_list_from_argument(fallback_paths)
+    ignore_projects = get_list_from_argument(ignore_projects)
 
-    # find dependencies recursively for each directory
-    # (if we ever need something fancier, there is "pycosat" or "networkx" to solve this stuff)
-    all_deps = {}
-
-    def add_deps_from_directories(directories, list_to_add_deps):
-        """
-        A data structure (`Dep`) is created for each project rooted in the given directories.
-
-        :param sequence(unicode) directories: projects' roots to use
-        :param list(Dep) list_to_add_deps: a list to be populated with the created `Dep`s
-        processed `Dep`s (in case multiple projects have the same dependency)
-        """
-        for dep_directory in directories:
-            if dep_directory not in all_deps:
-                dep = create_new_dep_from_directory(dep_directory, ignore_projects)
-                all_deps[dep_directory] = dep
-                if not dep.ignored:
-                    current_dep_directories = get_shallow_dependencies_directories(
-                        dep_directory)
-                    add_deps_from_directories(current_dep_directories, dep.deps)
-            else:
-                dep = all_deps[dep_directory]
-            list_to_add_deps.append(dep)
-
-    root_deps = []
-    add_deps_from_directories(directories, root_deps)
+    # Get deps.
+    root_deps = obtain_all_dependecies_recursively(directories, ignore_projects)
 
     if pretty_print:
+        # We don't need them in order to pretty print.
         pretty_print_dependency_tree(root_deps)
         return 0
 
-    # get dependencies in order
-    already_walked = set()
-    deps_in_order = []
-
-    def walk_deps(dep_list):
-        """
-        Recursively list the given `Dep`s' dependencies populating `deps_in_order` from the deepest
-        dependency to the root project, no dependency/project is added twice.
-        :param sequence(Dep) dep_list: the dependencies/projects to list dependencies (recursively)
-        """
-        for dep in dep_list:
-            if dep.abspath not in already_walked:
-                already_walked.add(dep.abspath)
-                if len(dep.deps) != 0 and not all(d.abspath in already_walked for d in dep.deps):
-                    walk_deps(dep.deps)
-                deps_in_order.append(dep)
-
-    walk_deps(root_deps)
+    deps_in_order = obtain_dependencies_ordered_for_execution(root_deps)
 
     if not command:
         print('\n'.join(dep.name for dep in deps_in_order if not dep.ignored))
-        sys.exit(0)
+        return 0
 
-    #=========================================================================
+    # ==============================================================================================
     # execution
-    #=========================================================================
+    # ==============================================================================================
 
-    def format_command(command, dep):
-        """
-        Process the variables in command.
-        :type command: unicode | sequence(unicode)
-        :type dep: Dep
-        :rtype: unicode | list(unicode)
-        """
-        format_dict = {
-            'name': dep.name, 'abs': dep.abspath}
-
-        def _format(s, format_dict):
-            """
-            :type s: unicode
-            :type format_dict: dict(unicode,unicode)
-            :rtype: unicode
-            """
-            for key, item in format_dict.iteritems():
-                s = s.replace('{' + key + '}', item)
-            return s
-
-        if isinstance(command, (list, tuple)):
-            return [_format(a, format_dict) for a in command]
-        else:
-            return _format(command, format_dict)
-
-    # check if command is an executable relative to dependency working dir
+    # check if command is an "executable"
 
     first_dep = root_deps[0]
     first_working_dir = first_dep.abspath
@@ -530,6 +468,110 @@ def pretty_print_dependency_tree(root_deps):
             else:
                 print_formatted_dep(dep.name, indentation, '({})')
     print_deps(root_deps)
+
+
+def obtain_all_dependecies_recursively(root_directories, ignored_projects):
+    """
+    Creates a list with a `Dep` for each item in `root_directories` where each project is inspected
+    recursively for its dependencies.
+
+    :param sequence(unicode) root_directories: The root directories identifying projects.
+    :param sequence(unicode) ignored_projects: Project names to be marked as ignored (and do not
+        recurse into it's dependencies.
+    :rtype: list(Dep)
+    :return: The created list.
+    """
+    # find dependencies recursively for each directory
+    # (if we ever need something fancier, there is "pycosat" or "networkx" to solve this stuff)
+    all_deps = {}
+
+    def add_deps_from_directories(directories, list_to_add_deps):
+        """
+        A data structure (`Dep`) is created for each project rooted in the given directories.
+
+        :param sequence(unicode) directories: projects' roots to use
+        :param list(Dep) list_to_add_deps: a list to be populated with the created `Dep`s
+        processed `Dep`s (in case multiple projects have the same dependency)
+        """
+        for dep_directory in directories:
+            if dep_directory not in all_deps:
+                dep = create_new_dep_from_directory(dep_directory, ignored_projects)
+                all_deps[dep_directory] = dep
+                if not dep.ignored:
+                    current_dep_directories = get_shallow_dependencies_directories(
+                        dep_directory)
+                    add_deps_from_directories(current_dep_directories, dep.deps)
+            else:
+                dep = all_deps[dep_directory]
+            list_to_add_deps.append(dep)
+
+    root_deps = []
+    add_deps_from_directories(root_directories, root_deps)
+    return root_deps
+
+
+def obtain_dependencies_ordered_for_execution(root_deps):
+    """
+    Return a list of the dependencies (visited recursively).
+
+    Ordering:
+
+    - A root project will be present after it's dependencies;
+    - The root projects will have the same order that the one they are passed (the exception is when
+      a root project is a dependency of a previously listed root project, it will be listed as a
+      dependency and not listed again);
+    - No project is listed more than once;
+
+    :param list(Dep) root_deps: A list of the root projects.
+    :rtype: list(Dep)
+    :return: A list of all projects target to execution.
+    """
+    already_walked = set()  # bookkeeping.
+    deps_in_order = []
+
+    def walk_deps(dep_list):
+        """
+        Recursively list the given `Dep`s' dependencies populating `deps_in_order` from the deepest
+        dependency to the root project, no dependency/project is added twice.
+        :param sequence(Dep) dep_list: the dependencies/projects to list dependencies (recursively)
+        """
+        for dep in dep_list:
+            if dep.abspath not in already_walked:
+                already_walked.add(dep.abspath)
+                if len(dep.deps) != 0 and not all(d.abspath in already_walked for d in dep.deps):
+                    walk_deps(dep.deps)
+                deps_in_order.append(dep)
+
+    walk_deps(root_deps)
+    return deps_in_order
+
+
+def format_command(command, dep):
+    """
+    Process the variables in command.
+    :type command: unicode | sequence(unicode)
+    :type dep: Dep
+    :rtype: unicode | list(unicode)
+    """
+    format_dict = {
+        'name': dep.name,
+        'abs': dep.abspath,
+    }
+
+    def _format(s, format_dict):
+        """
+        :type s: unicode
+        :type format_dict: dict(unicode,unicode)
+        :rtype: unicode
+        """
+        for key, item in format_dict.iteritems():
+            s = s.replace('{' + key + '}', item)
+        return s
+
+    if isinstance(command, (list, tuple)):
+        return [_format(a, format_dict) for a in command]
+    else:
+        return _format(command, format_dict)
 
 
 def shell_execute(command):
