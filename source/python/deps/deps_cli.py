@@ -232,9 +232,6 @@ def is_executable_and_get_interpreter(folders, filename):
     '--pretty-print', '-pp', is_flag=True,
     help='Pretty print dependencies in a tree.')
 @click.option(
-    '--ignore-filter', '-i', is_flag=True,
-    help='Always run the command, ignoring the check for relative executable existence.')
-@click.option(
     '--if-exist', '-f', multiple=True,
     help='Only run the command if the file exists (relative to dependency working directory).')
 @click.option(
@@ -260,7 +257,6 @@ def cli(
     command,
     projects,
     pretty_print,
-    ignore_filter,
     if_exist,
     here,
     dry_run,
@@ -438,9 +434,6 @@ def cli(
         [first_working_dir] + fallback_paths,
         expanded_first_command,
     )[0]
-    if ignore_filter:
-        command_must_be_executable = False
-        filter_if_exist = []
 
     def pass_filter(dep):
         """
