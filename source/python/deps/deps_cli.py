@@ -224,10 +224,10 @@ def is_executable_and_get_interpreter(folders, filename):
 
 @click.command(name=PROG_NAME)
 @click.argument('command', nargs=-1)
-@click.version_option('0.2')
+@click.version_option('0.3')
 @click.option(
     '--projects', '-p', default='.',
-    help="List of projects, separated by ',' (without spaces).")
+    help="List of projects.")
 @click.option(
     '--pretty-print', '-pp', is_flag=True,
     help='Pretty print dependencies in a tree.')
@@ -245,14 +245,14 @@ def is_executable_and_get_interpreter(folders, filename):
     help='Print more information.')
 @click.option(
     '--fallback-paths', default='', envvar='DEPS_FALLBACK_PATHS',
-    help="List of paths, separated by ',' (without spaces) where to look for the executable task if"
-         " it is not found in the project. Instead of passing this option an environment variable"
-         " with the name DEPS_FALLBACK_PATHS can be used.")
+    help='List of paths, where to look for the executable task if it is not found in the project.'
+         ' Instead of passing this option an environment variable with the name DEPS_FALLBACK_PATHS'
+         ' can be used.')
 @click.option(
     '--ignore-projects', default='', envvar='DEPS_IGNORE_PROJECTS',
-    help="List of project names, separated by ',' (without spaces), of projects to ignore when"
-         " looking for dependencies and will not recurse into those projects. Instead of passing"
-         " this option an environment variable with the name DEPS_IGNORE_PROJECTS can be used.")
+    help='List of project\'s names to ignore when looking for dependencies and will not recurse'
+         ' into those projects. Instead of passing this option an environment variable with the'
+         ' name DEPS_IGNORE_PROJECTS can be used.')
 def cli(
     command,
     projects,
@@ -289,9 +289,10 @@ def cli(
           deps [parameters] <command>
 
       To prevent deps to process any option or flags passed to command a "--" can be used
+
           deps [parameters] -- <command> --with --flags
 
-        \b
+      \b
         <command> may contain some variables:
           * {name}: The dependency bare name (ex.: eden)
           * {abs}:  The dependency absolute path (ex.: X:\\ws\\eden)
@@ -300,10 +301,18 @@ def cli(
       relative to the current directory, it will automatically skip
       dependencies that do not have this file inside.
 
-    If the option --require-file is used dependencies not having a file named as this relative to the
-    given dependency root directory are skipped:
+    If the option --require-file is used dependencies not having a file named as this relative to
+    the given dependency root directory are skipped:
 
           deps --require-file Makefile -- make clean
+
+    List options should be passed as a list separated by "," or ";" or ":" (with out spaces, if
+    spaces are required the value must be properly escaped as if must be a single argument):
+
+      \b
+        deps -p my_project,cool_project
+        deps -p "c:\project;c:\other project" (on windows)
+        deps -p '~/project:~/other project' (on linux)
 
     """
     # Parse arguments that are lists.
