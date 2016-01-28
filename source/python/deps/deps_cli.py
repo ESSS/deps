@@ -357,33 +357,8 @@ def cli(
     add_deps_from_directories(directories, root_deps)
 
     if pretty_print:
-        already_printed = set()
-
-        legend = textwrap.dedent('''\
-            # - project_name: listed or target of command execution;
-            # - (project_name): have already been printed in the tree;
-            # - <project_name>: have been ignored (see `--ignored-projects` option);
-        ''')
-        print(legend)
-
-        def print_formatted_dep(name, identation, name_template='{}'):
-            print(identation + name_template.format(name))
-
-        def print_deps(dep_list, indentation_size=0, indentation_string='    '):
-            indentation = indentation_string * indentation_size
-            next_indentation_size = indentation_size + 1
-            for dep in dep_list:
-                if dep.ignored:
-                    print_formatted_dep(dep.name, indentation, '<{}>')
-                    continue
-                if dep.abspath not in already_printed:
-                    print_formatted_dep(dep.name, indentation)
-                    already_printed.add(dep.abspath)
-                    print_deps(dep.deps, next_indentation_size, indentation_string)
-                else:
-                    print_formatted_dep(dep.name, indentation, '({})')
-        print_deps(root_deps)
-        sys.exit(0)
+        pretty_print_dependency_tree(root_deps)
+        return 0
 
     # get dependencies in order
     already_walked = set()
@@ -521,6 +496,40 @@ def cli(
             if process.returncode != 0:
                 echo_error('Command failed')
                 sys.exit(process.returncode)
+
+
+def pretty_print_dependency_tree(root_deps):
+    """
+    Prints an indented tree for the projects (and their dependencies). A short legend is printed
+    describing the decoration used.
+    :param list(Dep) root_deps: The list of root dependencies.
+    """
+    already_printed = set()
+
+    legend = textwrap.dedent('''\
+        # - project_name: listed or target of command execution;
+        # - (project_name): have already been printed in the tree;
+        # - <project_name>: have been ignored (see `--ignored-projects` option);
+    ''')
+    print(legend)
+
+    def print_formatted_dep(name, identation, name_template='{}'):
+        print(identation + name_template.format(name))
+
+    def print_deps(dep_list, indentation_size=0, indentation_string='    '):
+        indentation = indentation_string * indentation_size
+        next_indentation_size = indentation_size + 1
+        for dep in dep_list:
+            if dep.ignored:
+                print_formatted_dep(dep.name, indentation, '<{}>')
+                continue
+            if dep.abspath not in already_printed:
+                print_formatted_dep(dep.name, indentation)
+                already_printed.add(dep.abspath)
+                print_deps(dep.deps, next_indentation_size, indentation_string)
+            else:
+                print_formatted_dep(dep.name, indentation, '({})')
+    print_deps(root_deps)
 
 
 def shell_execute(command):
