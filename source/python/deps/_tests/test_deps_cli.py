@@ -511,7 +511,6 @@ def test_ignore_projects(
 
 def test_require_file(cli_runner, project_tree, piped_shell_execute):
     """
-    :type use_env_var: bool
     :type cli_runner: click.testing.CliRunner
     :type project_tree: py.path.local
     :type piped_shell_execute: mocker.patch
