@@ -338,7 +338,7 @@ def cli(
         pretty_print_dependency_tree(root_deps)
         return 0
 
-    def pass_filter(dependency, quiet):
+    def required_files_filter(dependency, quiet):
         """
         :type dependency: Dep
         :type quiet: bool
@@ -359,16 +359,36 @@ def cli(
     if not command:
         deps_to_output = [
             dep.name for dep in deps_in_order
-            if not dep.ignored and pass_filter(dep, quiet=True)
+            if not dep.ignored and required_files_filter(dep, quiet=True)
         ]
         print('\n'.join(deps_to_output))
         return 0
 
     # Execution.
+    execution_return = execute_command_in_dependencies(
+        command,
+        deps_in_order,
+        fallback_paths=fallback_paths,
+        required_files_filter=required_files_filter,
+        dry_run=dry_run,
+        verbose=verbose,
+        here=here,
+    )
+    sys.exit(execution_return)
 
-    command_must_be_executable = is_command_executable(command[0], deps_in_order, fallback_paths)
 
-    for dep in deps_in_order:
+def execute_command_in_dependencies(
+    command,
+    dependencies,
+    fallback_paths=None,
+    required_files_filter=None,
+    dry_run=False,
+    verbose=False,
+    here=False,
+):
+    command_must_be_executable = is_command_executable(command[0], dependencies, fallback_paths)
+
+    for dep in dependencies:
         click.secho('\n' + '=' * MAX_LINE_LENGTH, fg='black', bold=True)
 
         # Checks before execution.
@@ -376,7 +396,7 @@ def cli(
             click.secho('{}: ignored'.format(dep.name), fg='cyan')
             continue
 
-        if not pass_filter(dep, quiet=False):
+        if not required_files_filter(dep, quiet=False):
             continue
 
         formatted_command = format_command(command, dep)
@@ -419,7 +439,8 @@ def cli(
                 echo_verbose_msg('return code: {}'.format(process.returncode))
             if process.returncode != 0:
                 echo_error('Command failed')
-                sys.exit(process.returncode)
+                return process.returncode
+    return 0
 
 
 def is_command_executable(executable_candidate, all_dependencies, fallback_paths):
