@@ -510,8 +510,6 @@ def obtain_all_dependecies_recursively(root_directories, ignored_projects):
     :rtype: list(Dep)
     :return: The created list.
     """
-    # find dependencies recursively for each directory
-    # (if we ever need something fancier, there is "pycosat" or "networkx" to solve this stuff)
     all_deps = {}
 
     def add_deps_from_directories(directories, list_to_add_deps):
@@ -555,6 +553,8 @@ def obtain_dependencies_ordered_for_execution(root_deps):
     :rtype: list(Dep)
     :return: A list of all projects target to execution.
     """
+    # find dependencies recursively for each directory
+    # (if we ever need something fancier, there is "pycosat" or "networkx" to solve this stuff)
     already_walked = set()  # bookkeeping.
     deps_in_order = []
 
