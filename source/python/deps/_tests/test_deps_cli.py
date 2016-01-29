@@ -122,7 +122,7 @@ def test_interpreter_awareness(cli_runner, project_tree, piped_shell_execute):
     task_script = os.path.join('tasks', 'asd')
     command_args = ['-p', root_b, '-v', task_script, '{name}']
     result = cli_runner.invoke(deps_cli.cli, command_args)
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
         '===============================================================================',
@@ -136,10 +136,10 @@ def test_interpreter_awareness(cli_runner, project_tree, piped_shell_execute):
         'deps: return code: 0',
         '',
         '===============================================================================',
-        'dep_b.1.1: skipping',
+        'dep_b.1.1: skipping since "tasks[\\/]asd" is not an executable (and an executable is expected)',
         '',
         '===============================================================================',
-        'dep_b.1: skipping',
+        'dep_b.1: skipping since "tasks[\\/]asd" is not an executable (and an executable is expected)',
         '',
         '===============================================================================',
         'root_b:',
@@ -300,10 +300,10 @@ def test_script_execution(cli_runner, project_tree, piped_shell_execute):
         'deps: return code: 0',
         '',
         '===============================================================================',
-        'dep_b.1.1: skipping',
+        'dep_b.1.1: skipping since "tasks[\\/]asd" is not an executable (and an executable is expected)',
         '',
         '===============================================================================',
-        'dep_b.1: skipping',
+        'dep_b.1: skipping since "tasks[\\/]asd" is not an executable (and an executable is expected)',
         '',
         '===============================================================================',
         'root_b:',
@@ -391,7 +391,7 @@ def test_script_execution_fallback(
         command_args.insert(0, '--fallback-paths={}'.format(unicode(tmpdir)))
 
     result = cli_runner.invoke(deps_cli.cli, command_args, env=extra_env)
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
         '===============================================================================',
