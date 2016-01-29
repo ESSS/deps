@@ -316,7 +316,6 @@ def cli(
         deps -p '~/project:~/other project' (on linux)
 
     """
-    # Parse arguments that are lists.
     def get_list_from_argument(value):
         """
         :type value: unicode
@@ -332,7 +331,6 @@ def cli(
     fallback_paths = get_list_from_argument(fallback_paths)
     ignore_projects = get_list_from_argument(ignore_projects)
 
-    # Get deps.
     root_deps = obtain_all_dependecies_recursively(directories, ignore_projects)
 
     if pretty_print:
@@ -340,78 +338,66 @@ def cli(
         pretty_print_dependency_tree(root_deps)
         return 0
 
-    deps_in_order = obtain_dependencies_ordered_for_execution(root_deps)
-
-    if not command:
-        print('\n'.join(dep.name for dep in deps_in_order if not dep.ignored))
-        return 0
-
-    # ==============================================================================================
-    # execution
-    # ==============================================================================================
-
-    # check if command is an "executable"
-
-    first_dep = root_deps[0]
-    first_working_dir = first_dep.abspath
-    first_command = command[0]
-    expanded_first_command = format_command(first_command, first_dep)
-
-    command_must_be_executable = is_executable_and_get_interpreter(
-        [first_working_dir] + fallback_paths,
-        expanded_first_command,
-    )[0]
-
-    def pass_filter(dep):
+    def pass_filter(dependency, quiet):
         """
-        :type dep: Dep
+        :type dependency: Dep
+        :type quiet: bool
         :return: `True` if the necessary files/folders are present, `False` otherwise.
         """
         for f in require_file:
-            file_to_check = os.path.join(dep.abspath, format_command(f, dep))
+            file_to_check = os.path.join(dependency.abspath, format_command(f, dependency))
             if not os.path.isfile(file_to_check) and not os.path.isdir(file_to_check):
+                if not quiet:
+                    msg = '{}: skipping since "{}" does not exist'
+                    msg = msg.format(dependency.name, file_to_check)
+                    click.secho(msg, fg='cyan')
                 return False
         return True
 
-    # execute command for each dependency
+    deps_in_order = obtain_dependencies_ordered_for_execution(root_deps)
+    
+    if not command:
+        deps_to_output = [
+            dep.name for dep in deps_in_order
+            if not dep.ignored and pass_filter(dep, quiet=True)
+        ]
+        print('\n'.join(deps_to_output))
+        return 0
+
+    # Execution.
+
+    command_must_be_executable = is_command_executable(command[0], deps_in_order, fallback_paths)
+
     for dep in deps_in_order:
         click.secho('\n' + '=' * MAX_LINE_LENGTH, fg='black', bold=True)
+
+        # Checks before execution.
         if dep.ignored:
             click.secho('{}: ignored'.format(dep.name), fg='cyan')
             continue
+
+        if not pass_filter(dep, quiet=False):
+            continue
+
+        formatted_command = format_command(command, dep)
+        if command_must_be_executable:
+            is_executable, interpreter, filename = is_executable_and_get_interpreter(
+                [dep.abspath] + fallback_paths, formatted_command[0])
+            if is_executable:
+                formatted_command[0] = filename
+                if interpreter:
+                    formatted_command.insert(0, interpreter)
+            else:
+                msg = '{}: skipping since "{}" is not an executable (and an executable is expected)'
+                msg = msg.format(dep.name, formatted_command[0])
+                click.secho(msg, fg='cyan')
+                continue
 
         working_dir = None
         if not here:
             working_dir = dep.abspath
 
-        formatted_command = format_command(command, dep)
-
-        is_executable, interpreter, filename = is_executable_and_get_interpreter(
-            [dep.abspath], formatted_command[0])
-
-        skip = not pass_filter(dep) or (working_dir and not os.path.isdir(working_dir))
-        if (
-                not skip and  # Just if not already skipping.
-                command_must_be_executable and
-                not is_executable  # Will need fallback.
-        ):
-            for fallback in fallback_paths:
-                is_executable, interpreter, filename = is_executable_and_get_interpreter(
-                    [fallback], formatted_command[0])
-                if is_executable:
-                    break
-            else:
-                skip = True  # No fallback found, skip.
-        if skip:
-            click.secho('{}: skipping'.format(dep.name), fg='cyan')
-            continue
         click.secho('{}:'.format(dep.name), fg='cyan', bold=True)
-
-        if is_executable:
-            formatted_command[0] = filename
-        if interpreter:
-            formatted_command.insert(0, interpreter)
-
         if verbose or dry_run:
             command_to_print = ' '.join(
                 arg.replace(' ', '\\ ') for arg in formatted_command)
@@ -434,6 +420,28 @@ def cli(
             if process.returncode != 0:
                 echo_error('Command failed')
                 sys.exit(process.returncode)
+
+
+def is_command_executable(executable_candidate, all_dependencies, fallback_paths):
+    """
+    Return `True` if the executable candidate is actually an executable in any of de dependencies
+    and `False` otherwise.
+    :param unicode executable_candidate: The unicode for the possible executable (fill be formatted
+        with for each dependency give, see `format_command`).
+    :param sequence(Dep) all_dependencies: All dependencies.
+    :param sequence(unicode) fallback_paths: The path where to look for fallbacks.
+    :rtype: bool
+    """
+    is_executable = False
+    for dep in all_dependencies:
+        folders = [dep.abspath]
+        folders.extend(fallback_paths)
+        expanded_candidate = format_command(executable_candidate, dep)
+        is_executable, interpreter, fullname = is_executable_and_get_interpreter(
+            folders, expanded_candidate)
+        if is_executable:
+            break
+    return is_executable
 
 
 def pretty_print_dependency_tree(root_deps):
