@@ -551,3 +551,60 @@ def test_require_file(cli_runner, project_tree, piped_shell_execute):
     )
 
 
+def test_continue_on_failue(cli_runner, project_tree, piped_shell_execute):
+    """
+    :type cli_runner: click.testing.CliRunner
+    :type project_tree: py.path.local
+    :type piped_shell_execute: mocker.patch
+    """
+    root_b = unicode(project_tree.join('root_b'))
+    base_args = ['--continue-on-failure', '-p', root_b]
+
+    # All fail.
+    command_args = base_args + ['does-not-exist']
+    result = cli_runner.invoke(deps_cli.cli, command_args)
+    assert result.exit_code != 0, result.output
+    matcher = LineMatcher(result.output.splitlines())
+    matcher.fnmatch_lines([
+        'dep_z:',
+        'deps: error: Command failed',
+
+        'dep_b.1.1:',
+        'deps: error: Command failed',
+
+        'dep_b.1:',
+        'deps: error: Command failed',
+
+        'root_b:',
+        'deps: error: Command failed',
+    ])
+
+    # Some fail.
+    if sys.platform.startswith('win'):
+        dir_or_ls = 'dir'
+    else:
+        dir_or_ls = 'ls'
+    command_args = base_args + [dir_or_ls, os.path.join('tasks', 'asd.py')]
+    result = cli_runner.invoke(deps_cli.cli, command_args)
+    assert result.exit_code != 0, result.output
+    matcher = LineMatcher(result.output.splitlines())
+    matcher.fnmatch_lines([
+        'dep_z:',
+
+        'dep_b.1.1:',
+        'deps: error: Command failed',
+
+        'dep_b.1:',
+        'deps: error: Command failed',
+
+        'root_b:',
+    ])
+
+    # None fail.
+    command_args = base_args + ['echo', 'This', 'is', '{name}']
+    result = cli_runner.invoke(deps_cli.cli, command_args)
+    assert result.exit_code == 0, result.output
+    assert 'deps: error: Command failed' not in result.output
+
+
+

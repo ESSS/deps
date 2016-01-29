@@ -399,9 +399,33 @@ def execute_command_in_dependencies(
     required_files_filter=None,
     dry_run=False,
     verbose=False,
+    continue_on_failure=False,
     here=False,
 ):
+    """
+    Execute the given command for the given dependencies.
+
+    :param list(unicode) command: The commando to be executed.
+    :param list(Dep) dependencies: The list of dependencies for which execute the command.
+    :param list(unicode) fallback_paths: A list of path to look for the command if it does not exist
+        in the dependency root directory (only applicable if the command is deemed an executable).
+    :param callable required_files_filter: A list os files required in a dependency root directory
+        to execute the command.
+    :param bool dry_run: Does all the checks and most output normally but does not actually execute
+        the command.
+    :param bool verbose: Prints extra information.
+    :param bool continue_on_failure: When this is `False` the first command with a non zero return
+        code makes the dependency processing to stop and this function returns, when it is `True`
+        all dependencies are always processed.
+    :param bool here: Does not change the working dir to the root of the dependency when executing
+        the command.
+
+    :rtype: list(int)
+    :return: The exit code of the commands executed so far (may be smaller than `dependencies` list
+        when `continue_on_failure` is false).
+    """
     command_must_be_executable = is_command_executable(command[0], dependencies, fallback_paths)
+    exit_codes = []
 
     for dep in dependencies:
         click.secho('\n' + '=' * MAX_LINE_LENGTH, fg='black', bold=True)
@@ -449,19 +473,21 @@ def execute_command_in_dependencies(
 
             with cd(working_dir):
                 process = shell_execute(formatted_command)
+            exit_codes.append(process.returncode)
 
             if verbose:
                 echo_verbose_msg('return code: {}'.format(process.returncode))
             if process.returncode != 0:
                 echo_error('Command failed')
-                return process.returncode
-    return 0
+                if not continue_on_failure:
+                    break
+    return exit_codes
 
 
 def get_list_from_argument(value):
     """
     :type value: unicode
-    :type separator: unicode
+
     :rtype: list(unicode)
     :return: The list obtained from `value` (can be empty if `value` is empty).
     """
@@ -492,6 +518,10 @@ def get_list_from_argument(value):
     '--verbose', '-v', is_flag=True,
     help='Print more information.')
 @click.option(
+    '--continue-on-failure', is_flag=True,
+    help='Continue processing commands even when one fail (if some command fail the return value'
+         ' will be non zero).')
+@click.option(
     '--fallback-paths', default='', envvar='DEPS_FALLBACK_PATHS',
     help='List of paths, where to look for the executable task if it is not found in the project.'
          ' Instead of passing this option an environment variable with the name DEPS_FALLBACK_PATHS'
@@ -509,6 +539,7 @@ def cli(
     here,
     dry_run,
     verbose,
+    continue_on_failure,
     fallback_paths,
     ignore_projects,
 ):
@@ -610,9 +641,11 @@ def cli(
         required_files_filter=required_files_filter,
         dry_run=dry_run,
         verbose=verbose,
+        continue_on_failure=continue_on_failure,
         here=here,
     )
-    sys.exit(execution_return)
+    execution_return = sorted(execution_return, key=abs)
+    sys.exit(execution_return[-1] if execution_return else 1)
 
 
 def shell_execute(command):
