@@ -508,3 +508,47 @@ def test_ignore_projects(
         '''
     )
 
+
+def test_require_file(cli_runner, project_tree, piped_shell_execute):
+    """
+    :type use_env_var: bool
+    :type cli_runner: click.testing.CliRunner
+    :type project_tree: py.path.local
+    :type piped_shell_execute: mocker.patch
+    """
+    root_b = unicode(project_tree.join('root_b'))
+    base_args = ['-p', root_b, '--require-file', 'tasks/asd']
+
+    command_args = base_args + ['-v', 'echo', 'This', 'is', '{name}']
+    result = cli_runner.invoke(deps_cli.cli, command_args)
+    assert result.exit_code == 0, result.output
+    matcher = LineMatcher(result.output.splitlines())
+    matcher.fnmatch_lines([
+        'dep_z:',
+        'deps: executing: echo This is dep_z',
+        'deps: from:      *[\\/]test_projects0[\\/]dep_z',
+        'This is dep_z',
+        'deps: return code: 0',
+
+        'dep_b.1.1: skipping since "*[\\/]test_projects0[\\/]dep_b.1.1[\\/]tasks[\\/]asd" does not exist',
+
+        'dep_b.1: skipping since "*[\\/]test_projects0[\\/]dep_b.1[\\/]tasks[\\/]asd" does not exist',
+
+        'root_b:',
+        'deps: executing: echo This is root_b',
+        'deps: from:      *[\\/]test_projects0[\\/]root_b',
+        'This is root_b',
+        'deps: return code: 0',
+    ])
+
+    command_args = ['-p', root_b, '--require-file', 'tasks/asd']
+    result = cli_runner.invoke(deps_cli.cli, command_args)
+    assert result.exit_code == 0, result.output
+    assert result.output == textwrap.dedent(
+        '''\
+        dep_z
+        root_b
+        '''
+    )
+
+
