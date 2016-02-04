@@ -9,10 +9,7 @@ def cli_runner():
     Fixture used to test click applications.
     :rtype: click.testing.CliRunner
     """
-    from click import utils
-    original_auto_wrap_for_ansi = utils.auto_wrap_for_ansi
     yield CliRunner()
-    utils.auto_wrap_for_ansi = original_auto_wrap_for_ansi
 
 
 @pytest.fixture

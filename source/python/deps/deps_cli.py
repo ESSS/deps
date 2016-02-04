@@ -492,61 +492,68 @@ def cli(
         deps -p '~/project:~/other project' (on linux)
 
     """
-    if force_color:
-        global _click_echo_color
-        _click_echo_color = True
-        from click import utils
-        utils.auto_wrap_for_ansi = None
+    original_auto_wrap_for_ansi = click.utils.auto_wrap_for_ansi
+    try:
+        if force_color:
+            global _click_echo_color
+            _click_echo_color = True
+            if sys.platform == 'win32':
+                # Click always wrap the output stream on windows calling
+                # `click.utils.auto_wrap_for_ansi`, setting to `None` causes ansi escape codes to
+                # be output.
+                click.utils.auto_wrap_for_ansi = None
 
-    directories = find_directories(get_list_from_argument(projects))
-    ignore_projects = get_list_from_argument(ignore_projects)
+        directories = find_directories(get_list_from_argument(projects))
+        ignore_projects = get_list_from_argument(ignore_projects)
 
-    root_deps = obtain_all_dependecies_recursively(directories, ignore_projects)
+        root_deps = obtain_all_dependecies_recursively(directories, ignore_projects)
 
-    if pretty_print:
-        # We don't need them in order to pretty print.
-        pretty_print_dependency_tree(root_deps)
-        return 0
+        if pretty_print:
+            # We don't need them in order to pretty print.
+            pretty_print_dependency_tree(root_deps)
+            return 0
 
-    def required_files_filter(dependency, quiet):
-        """
-        :type dependency: Dep
-        :type quiet: bool
+        def required_files_filter(dependency, quiet):
+            """
+            :type dependency: Dep
+            :type quiet: bool
 
-        :return: `True` if the necessary files/folders are present, `False` otherwise.
-        """
-        for f in require_file:
-            file_to_check = os.path.join(dependency.abspath, format_command(f, dependency))
-            if not os.path.isfile(file_to_check) and not os.path.isdir(file_to_check):
-                if not quiet:
-                    msg = '{}: skipping since "{}" does not exist'
-                    msg = msg.format(dependency.name, file_to_check)
-                    click.secho(msg, fg='cyan', color=_click_echo_color)
-                return False
-        return True
+            :return: `True` if the necessary files/folders are present, `False` otherwise.
+            """
+            for f in require_file:
+                file_to_check = os.path.join(dependency.abspath, format_command(f, dependency))
+                if not os.path.isfile(file_to_check) and not os.path.isdir(file_to_check):
+                    if not quiet:
+                        msg = '{}: skipping since "{}" does not exist'
+                        msg = msg.format(dependency.name, file_to_check)
+                        click.secho(msg, fg='cyan', color=_click_echo_color)
+                    return False
+            return True
 
-    deps_in_order = obtain_dependencies_ordered_for_execution(root_deps)
-    
-    if not command:
-        deps_to_output = [
-            dep.name for dep in deps_in_order
-            if not dep.ignored and required_files_filter(dep, quiet=True)
-        ]
-        print('\n'.join(deps_to_output))
-        return 0
+        deps_in_order = obtain_dependencies_ordered_for_execution(root_deps)
 
-    # Execution.
-    execution_return = execute_command_in_dependencies(
-        command,
-        deps_in_order,
-        required_files_filter=required_files_filter,
-        dry_run=dry_run,
-        verbose=verbose,
-        continue_on_failure=continue_on_failure,
-        here=here,
-    )
-    execution_return = sorted(execution_return, key=abs)
-    sys.exit(execution_return[-1] if execution_return else 1)
+        if not command:
+            deps_to_output = [
+                dep.name for dep in deps_in_order
+                if not dep.ignored and required_files_filter(dep, quiet=True)
+            ]
+            print('\n'.join(deps_to_output))
+            return 0
+
+        # Execution.
+        execution_return = execute_command_in_dependencies(
+            command,
+            deps_in_order,
+            required_files_filter=required_files_filter,
+            dry_run=dry_run,
+            verbose=verbose,
+            continue_on_failure=continue_on_failure,
+            here=here,
+        )
+        execution_return = sorted(execution_return, key=abs)
+        sys.exit(execution_return[-1] if execution_return else 1)
+    finally:
+        click.utils.auto_wrap_for_ansi = original_auto_wrap_for_ansi
 
 
 def shell_execute(command):
