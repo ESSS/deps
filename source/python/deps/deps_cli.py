@@ -492,10 +492,10 @@ def cli(
         deps -p '~/project:~/other project' (on linux)
 
     """
+    global _click_echo_color
     original_auto_wrap_for_ansi = click.utils.auto_wrap_for_ansi
     try:
         if force_color:
-            global _click_echo_color
             _click_echo_color = True
             if sys.platform == 'win32':
                 # Click always wrap the output stream on windows calling
@@ -553,6 +553,7 @@ def cli(
         execution_return = sorted(execution_return, key=abs)
         sys.exit(execution_return[-1] if execution_return else 1)
     finally:
+        _click_echo_color = None
         click.utils.auto_wrap_for_ansi = original_auto_wrap_for_ansi
 
 
