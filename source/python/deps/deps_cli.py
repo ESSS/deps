@@ -300,102 +300,9 @@ def format_command(command, dep):
         return _format(command, format_dict)
 
 
-def is_executable_and_get_interpreter(folders, filename):
-    """
-    Checks if a file is "executable" and return the interpreter to run the file.
-
-    When no interpreter is required to run the file and empty string is returned, the known files
-    that may require an interpreter are:
-
-    - .py: `sys.executable` is used as interpreter, if python can not determine how it is executed
-        the file is not interpreted as python script and will undergo further heuristics;
-
-    :type folders: sequence(unicode)
-    :type filename: unicode
-
-    :rtype: tuple(bool, unicode, unicode)
-    :returns: A tuple indicating if the file is to be considered executable and the interpreter
-    used to run the file and the full filename to run the file. The interpreter could be an empty
-    unicode if the file is not executable or no interpreter is required (or known).
-    """
-    def python_script_filter(folder_, filename_):
-        name_, ext_ = os.path.splitext(filename_)
-        if ext_ != '.py':
-            filename_ += '.py'
-        interpreter_ = sys.executable or ''
-        if interpreter_:
-            fullname_ = os.path.join(folder_, filename_)
-            if os.path.isfile(fullname_):
-                return interpreter_, fullname_
-        return None, None
-
-    script_filters = [python_script_filter]
-
-    def linux_executable_filter(folder_, filename_):
-        # Check for default linux executable. No interpreter needed.
-        fullname_ = os.path.join(folder_, filename_)
-        if os.path.isfile(fullname_) and os.access(fullname_, os.X_OK):
-            return '', fullname_
-        return None, None
-
-    def windows_executable_filter(folder_, filename_):
-        # Check for default windows executable. No interpreter needed.
-        fullname_ = os.path.join(folder_, filename_)
-        name_, ext_ = os.path.splitext(fullname_)
-        executable_extensions_ = os.environ['PATHEXT'].lower().split(';')
-        if os.path.isfile(fullname_) and ext_.lower() in executable_extensions_:
-            return '', fullname_
-        for ext_ in executable_extensions_:
-            fullname_ext_ = ''.join((fullname_, ext_))
-            if os.path.isfile(fullname_ext_):
-                return '', fullname_ext_
-        return None, None
-
-    if sys.platform.startswith('win'):
-        is_executable_filter = windows_executable_filter
-    else:
-        is_executable_filter = linux_executable_filter
-
-    for folder in folders:
-        for script_filter in script_filters:
-            interpreter, fullname = script_filter(folder, filename)
-            if interpreter is not None:
-                break
-        else:
-            interpreter, fullname = is_executable_filter(folder, filename)
-        if interpreter is not None:
-            return True, interpreter, fullname
-    return False, '', ''
-
-
-def is_command_executable(executable_candidate, all_dependencies, fallback_paths):
-    """
-    Return `True` if the executable candidate is actually an executable in any of de dependencies
-    and `False` otherwise.
-
-    :param unicode executable_candidate: The unicode for the possible executable (fill be formatted
-        with for each dependency give, see `format_command`).
-    :param sequence(Dep) all_dependencies: All dependencies.
-    :param sequence(unicode) fallback_paths: The path where to look for fallbacks.
-
-    :rtype: bool
-    """
-    is_executable = False
-    for dep in all_dependencies:
-        folders = [dep.abspath]
-        folders.extend(fallback_paths)
-        expanded_candidate = format_command(executable_candidate, dep)
-        is_executable, interpreter, fullname = is_executable_and_get_interpreter(
-            folders, expanded_candidate)
-        if is_executable:
-            break
-    return is_executable
-
-
 def execute_command_in_dependencies(
     command,
     dependencies,
-    fallback_paths=None,
     required_files_filter=None,
     dry_run=False,
     verbose=False,
@@ -407,8 +314,6 @@ def execute_command_in_dependencies(
 
     :param list(unicode) command: The commando to be executed.
     :param list(Dep) dependencies: The list of dependencies for which execute the command.
-    :param list(unicode) fallback_paths: A list of path to look for the command if it does not exist
-        in the dependency root directory (only applicable if the command is deemed an executable).
     :param callable required_files_filter: A list os files required in a dependency root directory
         to execute the command.
     :param bool dry_run: Does all the checks and most output normally but does not actually execute
@@ -424,7 +329,6 @@ def execute_command_in_dependencies(
     :return: The exit code of the commands executed so far (may be smaller than `dependencies` list
         when `continue_on_failure` is false).
     """
-    command_must_be_executable = is_command_executable(command[0], dependencies, fallback_paths)
     exit_codes = []
 
     for dep in dependencies:
@@ -439,18 +343,6 @@ def execute_command_in_dependencies(
             continue
 
         formatted_command = format_command(command, dep)
-        if command_must_be_executable:
-            is_executable, interpreter, filename = is_executable_and_get_interpreter(
-                [dep.abspath] + fallback_paths, formatted_command[0])
-            if is_executable:
-                formatted_command[0] = filename
-                if interpreter:
-                    formatted_command.insert(0, interpreter)
-            else:
-                msg = '{}: skipping since "{}" is not an executable (and an executable is expected)'
-                msg = msg.format(dep.name, formatted_command[0])
-                click.secho(msg, fg='cyan')
-                continue
 
         working_dir = None
         if not here:
@@ -522,11 +414,6 @@ def get_list_from_argument(value):
     help='Continue processing commands even when one fail (if some command fail the return value'
          ' will be non zero).')
 @click.option(
-    '--fallback-paths', default='', envvar='DEPS_FALLBACK_PATHS',
-    help='List of paths, where to look for the executable task if it is not found in the project.'
-         ' Instead of passing this option an environment variable with the name DEPS_FALLBACK_PATHS'
-         ' can be used.')
-@click.option(
     '--ignore-projects', default='', envvar='DEPS_IGNORE_PROJECTS',
     help='List of project\'s names to ignore when looking for dependencies and will not recurse'
          ' into those projects. Instead of passing this option an environment variable with the'
@@ -540,7 +427,6 @@ def cli(
     dry_run,
     verbose,
     continue_on_failure,
-    fallback_paths,
     ignore_projects,
 ):
     """
@@ -576,10 +462,6 @@ def cli(
           * {name}: The dependency bare name (ex.: eden)
           * {abs}:  The dependency absolute path (ex.: X:\\ws\\eden)
 
-      Note that if the first command word is an existing executable file
-      relative to the current directory, it will automatically skip
-      dependencies that do not have this file inside.
-
     If the option --require-file is used dependencies not having a file named as this relative to
     the given dependency root directory are skipped:
 
@@ -596,7 +478,6 @@ def cli(
 
     """
     directories = find_directories(get_list_from_argument(projects))
-    fallback_paths = get_list_from_argument(fallback_paths)
     ignore_projects = get_list_from_argument(ignore_projects)
 
     root_deps = obtain_all_dependecies_recursively(directories, ignore_projects)
@@ -637,7 +518,6 @@ def cli(
     execution_return = execute_command_in_dependencies(
         command,
         deps_in_order,
-        fallback_paths=fallback_paths,
         required_files_filter=required_files_filter,
         dry_run=dry_run,
         verbose=verbose,
