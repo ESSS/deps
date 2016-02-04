@@ -112,47 +112,6 @@ def test_no_args(cli_runner, project_tree, monkeypatch):
     )
 
 
-def test_interpreter_awareness(cli_runner, project_tree, piped_shell_execute):
-    """
-    :type cli_runner: click.testing.CliRunner
-    :type project_tree: py.path.local
-    :type piped_shell_execute: mocker.patch
-    """
-    root_b = unicode(project_tree.join('root_b'))
-    task_script = os.path.join('tasks', 'asd')
-    command_args = ['-p', root_b, '-v', task_script, '{name}']
-    result = cli_runner.invoke(deps_cli.cli, command_args)
-    assert result.exit_code == 0, result.output
-    matcher = LineMatcher(result.output.splitlines())
-    matcher.fnmatch_lines([
-        '===============================================================================',
-        'dep_z:',
-        'deps: executing: *[\\/]python* *[\\/]tasks[\\/]asd.py dep_z',
-        'deps: from:      *[\\/]test_projects0[\\/]dep_z',
-        'From python script!',
-        ' - sys.argv: dep_z;',
-        ' - cwd: *[\\/]test_projects0[\\/]dep_z;',
-        '',
-        'deps: return code: 0',
-        '',
-        '===============================================================================',
-        'dep_b.1.1: skipping since "tasks[\\/]asd" is not an executable (and an executable is expected)',
-        '',
-        '===============================================================================',
-        'dep_b.1: skipping since "tasks[\\/]asd" is not an executable (and an executable is expected)',
-        '',
-        '===============================================================================',
-        'root_b:',
-        'deps: executing: *[\\/]python* *[\\/]tasks[\\/]asd.py root_b',
-        'deps: from:      *[\\/]test_projects0[\\/]root_b',
-        'From python script!',
-        ' - sys.argv: root_b;',
-        ' - cwd: *[\\/]test_projects0[\\/]root_b;',
-        '',
-        'deps: return code: 0',
-    ])
-
-
 def test_cant_find_root(cli_runner, project_tree, piped_shell_execute):
     """
     :type cli_runner: click.testing.CliRunner
@@ -284,34 +243,30 @@ def test_script_execution(cli_runner, project_tree, piped_shell_execute):
     """
     root_b = unicode(project_tree.join('root_b'))
     task_script = os.path.join('tasks', 'asd')
-    command_args = ['-p', root_b, '-v', task_script, '{name}', '{abs}']
+    command_args = ['-p', root_b, '-v', '-f', 'tasks/asd', task_script, '{name}', '{abs}']
     result = cli_runner.invoke(deps_cli.cli, command_args)
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
         '===============================================================================',
         'dep_z:',
-        'deps: executing: *[\\/]python* *[\\/]tasks[\\/]asd.py dep_z *[\\/]test_projects0[\\/]dep_z',
+        'deps: executing: tasks[\\/]asd dep_z *[\\/]test_projects0[\\/]dep_z',
         'deps: from:      *[\\/]test_projects0[\\/]dep_z',
-        'From python script!',
-        ' - sys.argv: dep_z *[\\/]test_projects0[\\/]dep_z;',
-        ' - cwd: *[\\/]test_projects0[\\/]dep_z;',
+        'Sample script dep_z *[\\/]test_projects0[\\/]dep_z',
         '',
         'deps: return code: 0',
         '',
         '===============================================================================',
-        'dep_b.1.1: skipping since "tasks[\\/]asd" is not an executable (and an executable is expected)',
+        'dep_b.1.1: skipping since "*[\\/]tasks[\\/]asd" does not exist',
         '',
         '===============================================================================',
-        'dep_b.1: skipping since "tasks[\\/]asd" is not an executable (and an executable is expected)',
+        'dep_b.1: skipping since "*[\\/]tasks[\\/]asd" does not exist',
         '',
         '===============================================================================',
         'root_b:',
-        'deps: executing: *[\\/]python* *[\\/]tasks[\\/]asd.py root_b *[\\/]test_projects0[\\/]root_b',
+        'deps: executing: tasks[\\/]asd root_b *[\\/]test_projects0[\\/]root_b',
         'deps: from:      *[\\/]test_projects0[\\/]root_b',
-        'From python script!',
-        ' - sys.argv: root_b *[\\/]test_projects0[\\/]root_b;',
-        ' - cwd: *[\\/]test_projects0[\\/]root_b;',
+        'Sample script root_b *[\\/]test_projects0[\\/]root_b',
         '',
         'deps: return code: 0',
     ])
@@ -339,113 +294,41 @@ def test_script_return_code(cli_runner, project_tree, piped_shell_execute):
     ])
 
 
-
 @pytest.mark.parametrize('use_env_var', [
     True,
     False,
 ])
-def test_script_execution_fallback(
+def test_force_color(
     use_env_var,
     cli_runner,
     project_tree,
     piped_shell_execute,
-    tmpdir,
 ):
     """
     :type use_env_var: bool
     :type cli_runner: click.testing.CliRunner
     :type project_tree: py.path.local
     :type piped_shell_execute: mocker.patch
-    :type tmpdir: py.path.local
     """
-    # Create a fallback.
-    batch_script = textwrap.dedent(
-        '''\
-        @echo Fallback script for asd %*
-        '''
-    )
-    bash_script = textwrap.dedent(
-        '''\
-        #!/bin/bash
-        echo Fallback script for asd "$@"
-        '''
-    )
-    tasks_dir = tmpdir.mkdir('tasks')
-    script_file = tasks_dir.join('asd.bat')
-    script_file.write(batch_script)
-    script_file = tasks_dir.join('asd')
-    script_file.write(bash_script)
-    script_file = unicode(script_file)
-    st = os.stat(script_file)
-    os.chmod(script_file, st.st_mode | stat.S_IEXEC)
-    # Prepare the invocation.
-    root_a = unicode(project_tree.join('root_a'))
-    task_script = os.path.join('tasks', 'asd')
-    command_args = ['-p', root_a, '-v', task_script, '{name}', '{abs}']
-    # Configure the fallback path.
-    extra_env = {}
-    if use_env_var:
-        encoding = sys.getfilesystemencoding()
-        extra_env[b'DEPS_FALLBACK_PATHS'] = unicode(tmpdir).encode(encoding)
-    else:
-        command_args.insert(0, '--fallback-paths={}'.format(unicode(tmpdir)))
+    def configure_force_color():
+        if use_env_var:
+            extra_env[b'DEPS_FORCE_COLOR'] = b'1'
+        else:
+            command_args.insert(0, '--force-color')
 
-    result = cli_runner.invoke(deps_cli.cli, command_args, env=extra_env)
+    root_b = unicode(project_tree.join('root_b'))
+    # Prepare the invocation.
+    command_args = ['-v', '-p', root_b, 'echo', 'test', '{name}']
+    extra_env = {}
+    configure_force_color()
+
+    # Since `CliRunner.invoke` captures the output the stdout/stderr is not a tty.
+    result = cli_runner.invoke(deps_cli.cli, command_args, env=extra_env, color=None)
     assert result.exit_code == 0, result.output
-    matcher = LineMatcher(result.output.splitlines())
-    matcher.fnmatch_lines([
-        '===============================================================================',
-        'dep_z:',
-        'deps: executing: *[\\/]python* *[\\/]tasks[\\/]asd.py dep_z *[\\/]test_projects0[\\/]dep_z',
-        'deps: from:      *[\\/]test_projects0[\\/]dep_z',
-        'From python script!',
-        ' - sys.argv: dep_z *[\\/]test_projects0[\\/]dep_z;',
-        ' - cwd: *[\\/]test_projects0[\\/]dep_z;',
-        '',
-        'deps: return code: 0',
-        '',
-        '===============================================================================',
-        'dep_a.1.1:',
-        'deps: executing: *[\\/]test_script_execution_fallback?[\\/]tasks[\\/]asd* dep_a.1.1 *[\\/]test_projects0[\\/]dep_a.1.1',
-        'deps: from:      *[\\/]test_projects0[\\/]dep_a.1.1',
-        'Fallback script for asd dep_a.1.1 *[\\/]test_projects0[\\/]dep_a.1.1',
-        '',
-        'deps: return code: 0',
-        '',
-        '===============================================================================',
-        'dep_a.1.2:',
-        'deps: executing: *[\\/]test_script_execution_fallback?[\\/]tasks[\\/]asd* dep_a.1.2 *[\\/]test_projects0[\\/]dep_a.1.2',
-        'deps: from:      *[\\/]test_projects0[\\/]dep_a.1.2',
-        'Fallback script for asd dep_a.1.2 *[\\/]test_projects0[\\/]dep_a.1.2',
-        '',
-        'deps: return code: 0',
-        '',
-        '===============================================================================',
-        'dep_a.1:',
-        'deps: executing: *[\\/]test_script_execution_fallback?[\\/]tasks[\\/]asd* dep_a.1 *[\\/]test_projects0[\\/]dep_a.1',
-        'deps: from:      *[\\/]test_projects0[\\/]dep_a.1',
-        'Fallback script for asd dep_a.1 *[\\/]test_projects0[\\/]dep_a.1',
-        '',
-        'deps: return code: 0',
-        '',
-        '===============================================================================',
-        'dep_a.2:',
-        'deps: executing: *[\\/]test_script_execution_fallback?[\\/]tasks[\\/]asd* dep_a.2 *[\\/]test_projects0[\\/]dep_a.2',
-        'deps: from:      *[\\/]test_projects0[\\/]dep_a.2',
-        'Fallback script for asd dep_a.2 *[\\/]test_projects0[\\/]dep_a.2',
-        '',
-        'deps: return code: 0',
-        '',
-        '===============================================================================',
-        'root_a:',
-        'deps: executing: *[\\/]python* *[\\/]tasks[\\/]asd.py root_a *[\\/]test_projects0[\\/]root_a',
-        'deps: from:      *[\\/]test_projects0[\\/]root_a',
-        'From python script!',
-        ' - sys.argv: root_a *[\\/]test_projects0[\\/]root_a;',
-        ' - cwd: *[\\/]test_projects0[\\/]root_a;',
-        '',
-        'deps: return code: 0',
-    ])
+    output_repr = repr(result.output)
+    # CSI for Control Sequence Introducer (or Control Sequence Initiator).
+    ansi_csi_repr = '\\x1b['
+    assert ansi_csi_repr in output_repr
 
 
 @pytest.mark.parametrize('use_env_var', [
