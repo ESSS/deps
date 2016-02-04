@@ -429,9 +429,9 @@ def get_list_from_argument(value):
          ' name DEPS_IGNORE_PROJECTS can be used.')
 @click.option(
     '--force-color', is_flag=True, envvar='DEPS_FORCE_COLOR',
-    help='Always use colors on output (by default it is detected if running on a terminal). Instead'
-         ' of passing this option an environment variable with the name DEPS_FORCE_COLOR can be'
-         ' used.')
+    help='Always use colors on output (by default it is detected if running on a terminal). If file'
+         ' redirection is used ANSI escape sequences are output even on windows. Instead of passing'
+         ' this option an environment variable with the name DEPS_FORCE_COLOR can be used.')
 def cli(
     command,
     projects,
@@ -495,6 +495,8 @@ def cli(
     if force_color:
         global _click_echo_color
         _click_echo_color = True
+        from click import utils
+        utils.auto_wrap_for_ansi = None
 
     directories = find_directories(get_list_from_argument(projects))
     ignore_projects = get_list_from_argument(ignore_projects)
