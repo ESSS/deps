@@ -14,13 +14,15 @@ PROG_NAME = 'deps'
 PROG_MSG_PREFIX = PROG_NAME + ': '
 MAX_LINE_LENGTH = 79
 
+_click_echo_color = None
 
 def echo_verbose_msg(*args, **kwargs):
     """
     For "verbose" messages.
     """
-    click.echo(PROG_MSG_PREFIX, nl=False, file=sys.stderr)
+    click.echo(PROG_MSG_PREFIX, nl=False, file=sys.stderr, color=_click_echo_color)
     kwargs.update(file=sys.stderr)
+    kwargs.update(color=_click_echo_color)
     click.echo(*args, **kwargs)
 
 
@@ -29,10 +31,17 @@ def echo_error(*args, **kwargs):
     For "error" messages.
     """
     click.secho(
-        PROG_MSG_PREFIX + 'error: ', nl=False, file=sys.stderr, fg='red', bold=True)
+        PROG_MSG_PREFIX + 'error: ',
+        nl=False,
+        file=sys.stderr,
+        fg='red',
+        bold=True,
+        color=_click_echo_color,
+    )
     kwargs.update(file=sys.stderr)
     kwargs.update(fg='red')
     kwargs.update(bold=True)
+    kwargs.update(color=_click_echo_color)
     click.secho(*args, **kwargs)
 
 
@@ -332,11 +341,11 @@ def execute_command_in_dependencies(
     exit_codes = []
 
     for dep in dependencies:
-        click.secho('\n' + '=' * MAX_LINE_LENGTH, fg='black', bold=True)
+        click.secho('\n' + '=' * MAX_LINE_LENGTH, fg='black', bold=True, color=_click_echo_color)
 
         # Checks before execution.
         if dep.ignored:
-            click.secho('{}: ignored'.format(dep.name), fg='cyan')
+            click.secho('{}: ignored'.format(dep.name), fg='cyan', color=_click_echo_color)
             continue
 
         if not required_files_filter(dep, quiet=False):
@@ -348,7 +357,7 @@ def execute_command_in_dependencies(
         if not here:
             working_dir = dep.abspath
 
-        click.secho('{}:'.format(dep.name), fg='cyan', bold=True)
+        click.secho('{}:'.format(dep.name), fg='cyan', bold=True, color=_click_echo_color)
         if verbose or dry_run:
             command_to_print = ' '.join(
                 arg.replace(' ', '\\ ') for arg in formatted_command)
@@ -418,6 +427,11 @@ def get_list_from_argument(value):
     help='List of project\'s names to ignore when looking for dependencies and will not recurse'
          ' into those projects. Instead of passing this option an environment variable with the'
          ' name DEPS_IGNORE_PROJECTS can be used.')
+@click.option(
+    '--force-color', is_flag=True, envvar='DEPS_FORCE_COLOR',
+    help='Always use colors on output (by default it is detected if running on a terminal). Instead'
+         ' of passing this option an environment variable with the name DEPS_FORCE_COLOR can be'
+         ' used.')
 def cli(
     command,
     projects,
@@ -428,6 +442,7 @@ def cli(
     verbose,
     continue_on_failure,
     ignore_projects,
+    force_color,
 ):
     """
     Program to list dependencies of a project, or to execute a command for
@@ -477,6 +492,10 @@ def cli(
         deps -p '~/project:~/other project' (on linux)
 
     """
+    if force_color:
+        global _click_echo_color
+        _click_echo_color = True
+
     directories = find_directories(get_list_from_argument(projects))
     ignore_projects = get_list_from_argument(ignore_projects)
 
@@ -500,7 +519,7 @@ def cli(
                 if not quiet:
                     msg = '{}: skipping since "{}" does not exist'
                     msg = msg.format(dependency.name, file_to_check)
-                    click.secho(msg, fg='cyan')
+                    click.secho(msg, fg='cyan', color=_click_echo_color)
                 return False
         return True
 
