@@ -25,7 +25,8 @@ additional_repositories:
     branch: "master"
     reference: "$WORKSPACE/../../Shared/ref_repos/eden"    
 
-    
+console_color:
+
 junit_patterns:
 - "**/build/tests/*.xml"
 

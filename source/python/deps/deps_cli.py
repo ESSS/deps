@@ -14,13 +14,15 @@ PROG_NAME = 'deps'
 PROG_MSG_PREFIX = PROG_NAME + ': '
 MAX_LINE_LENGTH = 79
 
+_click_echo_color = None
 
 def echo_verbose_msg(*args, **kwargs):
     """
     For "verbose" messages.
     """
-    click.echo(PROG_MSG_PREFIX, nl=False, file=sys.stderr)
+    click.echo(PROG_MSG_PREFIX, nl=False, file=sys.stderr, color=_click_echo_color)
     kwargs.update(file=sys.stderr)
+    kwargs.update(color=_click_echo_color)
     click.echo(*args, **kwargs)
 
 
@@ -29,10 +31,17 @@ def echo_error(*args, **kwargs):
     For "error" messages.
     """
     click.secho(
-        PROG_MSG_PREFIX + 'error: ', nl=False, file=sys.stderr, fg='red', bold=True)
+        PROG_MSG_PREFIX + 'error: ',
+        nl=False,
+        file=sys.stderr,
+        fg='red',
+        bold=True,
+        color=_click_echo_color,
+    )
     kwargs.update(file=sys.stderr)
     kwargs.update(fg='red')
     kwargs.update(bold=True)
+    kwargs.update(color=_click_echo_color)
     click.secho(*args, **kwargs)
 
 
@@ -60,7 +69,7 @@ def get_shallow_dependencies_directories(base_directory):
     """
     :type base_directory: unicode
     :rtype: list(unicode)
-    :return: the first level (does not recursevely list dependencies of dependencies) dependencies
+    :return: The first level (does not recursevely list dependencies of dependencies) dependencies
     of the project rooted in the given directory
     """
     import jinja2
@@ -88,13 +97,13 @@ Dep = namedtuple('Dep', 'name,abspath,deps,ignored')
 
 def create_new_dep_from_directory(directory, ignore_projects):
     """
-    :param unicode directory: root directory of a project
-    :param list(unicode) ignore_projects: a list of project names to ignore (set the `ignored` attr
-    to `True`.)
+    :param unicode directory: Root directory of a project.
+    :param list(unicode) ignore_projects: A list of project names to ignore (set the `ignored` attr
+    to `True`).
     :rtype: Dep
     """
     directory = os.path.abspath(directory)
-    name=os.path.split(directory)[1]
+    name = os.path.split(directory)[1]
     return Dep(
         name=name,
         abspath=directory,
@@ -103,15 +112,50 @@ def create_new_dep_from_directory(directory, ignore_projects):
     )
 
 
+def pretty_print_dependency_tree(root_deps):
+    """
+    Prints an indented tree for the projects (and their dependencies). A short legend is printed
+    describing the decoration used.
+
+    :param list(Dep) root_deps: The list of root dependencies.
+    """
+    already_printed = set()
+
+    legend = textwrap.dedent('''\
+        # - project_name: listed or target of command execution;
+        # - (project_name): have already been printed in the tree;
+        # - <project_name>: have been ignored (see `--ignored-projects` option);
+    ''')
+    print(legend)
+
+    def print_formatted_dep(name, identation, name_template='{}'):
+        print(identation + name_template.format(name))
+
+    def print_deps(dep_list, indentation_size=0, indentation_string='    '):
+        indentation = indentation_string * indentation_size
+        next_indentation_size = indentation_size + 1
+        for dep in dep_list:
+            if dep.ignored:
+                print_formatted_dep(dep.name, indentation, '<{}>')
+                continue
+            if dep.abspath not in already_printed:
+                print_formatted_dep(dep.name, indentation)
+                already_printed.add(dep.abspath)
+                print_deps(dep.deps, next_indentation_size, indentation_string)
+            else:
+                print_formatted_dep(dep.name, indentation, '({})')
+    print_deps(root_deps)
+
+
 def find_ancestor_dir_with(filename, begin_in=None):
     """
     Look in current and ancestor directories (parent, parent of parent, ...) for a file.
 
-    :param unicode filename: file to find
-    :param unicode begin_in: directory to start searching
+    :param unicode filename: File to find.
+    :param unicode begin_in: Directory to start searching.
 
     :rtype: unicode
-    :return: absolute path to directory where file is located
+    :return: Absolute path to directory where file is located.
     """
     if begin_in is None:
         begin_in = os.curdir
@@ -134,8 +178,9 @@ def find_directories(raw_directories):
     Find ancestor directories that contain the FILE_WITH_DEPENDENCIES file.
 
     :type raw_directories: sequence(unicode)
+
     :rtype: list(unicode)
-    :returns: list of directories
+    :returns: List of directories.
     """
     raw_directories = list(raw_directories)
 
@@ -155,71 +200,214 @@ def find_directories(raw_directories):
     return directories
 
 
-def is_executable_and_get_interpreter(folders, filename):
+def obtain_all_dependecies_recursively(root_directories, ignored_projects):
     """
-    Checks if a file is "executable" and return the interpreter to run the file.
+    Creates a list with a `Dep` for each item in `root_directories` where each project is inspected
+    recursively for its dependencies.
 
-    When no interpreter is required to run the file and empty string is returned, the know files
-    that may require an interpreter are:
+    :param sequence(unicode) root_directories: The root directories identifying projects.
+    :param sequence(unicode) ignored_projects: Project names to be marked as ignored (and do not
+        recurse into it's dependencies.
 
-    - .py: `sys.executable` is used as interpreter, if python can not determine how it is executed
-        the file is not interpreted as python script and will undergo further heuristics;
-
-    :type folders: sequence(unicode)
-    :type filename: unicode
-    :rtype: tuple(bool, unicode)
-    :returns: A tuple indicating if the file is to be considered executable and the interpreter
-    used to run the file. The interpreter could be an empty unicode it the file is not executable
-    or no interpreter is require(or know) to run the file.
+    :rtype: list(Dep)
+    :return: The created list.
     """
-    name, ext = os.path.splitext(filename)
-    if ext == '.py':
-        # Python file.
-        interpreter = sys.executable or ''
-        if interpreter:
-            for folder in folders:
-                fullname = os.path.join(folder, filename)
+    all_deps = {}
 
-                if os.path.isfile(fullname):
-                    return True, interpreter
+    def add_deps_from_directories(directories, list_to_add_deps):
+        """
+        A data structure (`Dep`) is created for each project rooted in the given directories.
 
-    if not sys.platform.startswith('win'):
-        # Linux.
-        for folder in folders:
-            fullname = os.path.join(folder, filename)
+        :param sequence(unicode) directories: Projects' roots to use.
+        :param list(Dep) list_to_add_deps: A list to be populated with the created `Dep`s
+        processed `Dep`s (in case multiple projects have the same dependency).
+        """
+        for dep_directory in directories:
+            if dep_directory not in all_deps:
+                dep = create_new_dep_from_directory(dep_directory, ignored_projects)
+                all_deps[dep_directory] = dep
+                if not dep.ignored:
+                    current_dep_directories = get_shallow_dependencies_directories(
+                        dep_directory)
+                    add_deps_from_directories(current_dep_directories, dep.deps)
+            else:
+                dep = all_deps[dep_directory]
+            list_to_add_deps.append(dep)
 
-            if os.path.isfile(fullname) and os.access(fullname, os.X_OK):
-                return True, ''
+    root_deps = []
+    add_deps_from_directories(root_directories, root_deps)
+    return root_deps
 
+
+def obtain_dependencies_ordered_for_execution(root_deps):
+    """
+    Return a list of the dependencies (visited recursively).
+
+    Ordering:
+
+    - A root project will be present after it's dependencies;
+    - The root projects will have the same order that the one they are passed (the exception is when
+      a root project is a dependency of a previously listed root project, it will be listed as a
+      dependency and not listed again);
+    - No project is listed more than once;
+
+    :param list(Dep) root_deps: A list of the root projects.
+    :rtype: list(Dep)
+    :return: A list of all projects target to execution.
+    """
+    # find dependencies recursively for each directory
+    # (if we ever need something fancier, there is "pycosat" or "networkx" to solve this stuff)
+    already_walked = set()  # bookkeeping.
+    deps_in_order = []
+
+    def walk_deps(dep_list):
+        """
+        Recursively list the given `Dep`s' dependencies populating `deps_in_order` from the deepest
+        dependency to the root project, no dependency/project is added twice.
+
+        :param sequence(Dep) dep_list: the dependencies/projects to list dependencies (recursively)
+        """
+        for dep in dep_list:
+            if dep.abspath not in already_walked:
+                already_walked.add(dep.abspath)
+                if len(dep.deps) != 0 and not all(d.abspath in already_walked for d in dep.deps):
+                    walk_deps(dep.deps)
+                deps_in_order.append(dep)
+
+    walk_deps(root_deps)
+    return deps_in_order
+
+
+def format_command(command, dep):
+    """
+    Process the variables in command.
+
+    :type command: unicode | sequence(unicode)
+    :type dep: Dep
+
+    :rtype: unicode | list(unicode)
+    """
+    format_dict = {
+        'name': dep.name,
+        'abs': dep.abspath,
+    }
+
+    def _format(s, format_dict):
+        """
+        :type s: unicode
+        :type format_dict: dict(unicode,unicode)
+
+        :rtype: unicode
+        """
+        for key, item in format_dict.iteritems():
+            s = s.replace('{' + key + '}', item)
+        return s
+
+    if isinstance(command, (list, tuple)):
+        return [_format(a, format_dict) for a in command]
     else:
-        # Windows.
-        for folder in folders:
-            fullname = os.path.join(folder, filename)
+        return _format(command, format_dict)
 
-            executable_extensions = os.environ['PATHEXT'].lower().split(';')
-            if os.path.isfile(fullname) and ext.lower() in executable_extensions:
-                return True, ''
-            for ext in executable_extensions:
-                if os.path.isfile(''.join((fullname, ext))):
-                    return True, ''
 
-    return False, ''
+def execute_command_in_dependencies(
+    command,
+    dependencies,
+    required_files_filter=None,
+    dry_run=False,
+    verbose=False,
+    continue_on_failure=False,
+    here=False,
+):
+    """
+    Execute the given command for the given dependencies.
+
+    :param list(unicode) command: The commando to be executed.
+    :param list(Dep) dependencies: The list of dependencies for which execute the command.
+    :param callable required_files_filter: A list os files required in a dependency root directory
+        to execute the command.
+    :param bool dry_run: Does all the checks and most output normally but does not actually execute
+        the command.
+    :param bool verbose: Prints extra information.
+    :param bool continue_on_failure: When this is `False` the first command with a non zero return
+        code makes the dependency processing to stop and this function returns, when it is `True`
+        all dependencies are always processed.
+    :param bool here: Does not change the working dir to the root of the dependency when executing
+        the command.
+
+    :rtype: list(int)
+    :return: The exit code of the commands executed so far (may be smaller than `dependencies` list
+        when `continue_on_failure` is false).
+    """
+    exit_codes = []
+
+    for dep in dependencies:
+        click.secho('\n' + '=' * MAX_LINE_LENGTH, fg='black', bold=True, color=_click_echo_color)
+
+        # Checks before execution.
+        if dep.ignored:
+            click.secho('{}: ignored'.format(dep.name), fg='cyan', color=_click_echo_color)
+            continue
+
+        if not required_files_filter(dep, quiet=False):
+            continue
+
+        formatted_command = format_command(command, dep)
+
+        working_dir = None
+        if not here:
+            working_dir = dep.abspath
+
+        click.secho('{}:'.format(dep.name), fg='cyan', bold=True, color=_click_echo_color)
+        if verbose or dry_run:
+            command_to_print = ' '.join(
+                arg.replace(' ', '\\ ') for arg in formatted_command)
+            echo_verbose_msg('executing: ' + command_to_print)
+            if working_dir:
+                echo_verbose_msg('from:      ' + working_dir)
+
+        if not dry_run:
+            if not sys.platform.startswith('win'):
+                import pipes
+                for index, item in enumerate(formatted_command):
+                    formatted_command[index] = pipes.quote(item)
+                formatted_command = ' '.join(formatted_command)
+
+            with cd(working_dir):
+                process = shell_execute(formatted_command)
+            exit_codes.append(process.returncode)
+
+            if verbose:
+                echo_verbose_msg('return code: {}'.format(process.returncode))
+            if process.returncode != 0:
+                echo_error('Command failed')
+                if not continue_on_failure:
+                    break
+    return exit_codes
+
+
+def get_list_from_argument(value):
+    """
+    :type value: unicode
+
+    :rtype: list(unicode)
+    :return: The list obtained from `value` (can be empty if `value` is empty).
+    """
+    import re
+    item_pattern = '[^,{}]+'.format(os.pathsep)
+    return re.findall(item_pattern, value)
 
 
 @click.command(name=PROG_NAME)
 @click.argument('command', nargs=-1)
-@click.version_option('0.2')
+@click.version_option('0.3')
 @click.option(
     '--projects', '-p', default='.',
-    help="List of projects, separated by ',' (without spaces).")
+    help="List of projects.")
 @click.option(
     '--pretty-print', '-pp', is_flag=True,
     help='Pretty print dependencies in a tree.')
 @click.option(
-    '--ignore-filter', '-i', is_flag=True,
-    help='Always run the command, ignoring the check for relative executable existence.')
-@click.option(
-    '--if-exist', '-f', multiple=True,
+    '--require-file', '-f', multiple=True,
     help='Only run the command if the file exists (relative to dependency working directory).')
 @click.option(
     '--here', is_flag=True,
@@ -231,26 +419,30 @@ def is_executable_and_get_interpreter(folders, filename):
     '--verbose', '-v', is_flag=True,
     help='Print more information.')
 @click.option(
-    '--fallback-paths', default='', envvar='DEPS_FALLBACK_PATHS',
-    help="List of paths, separated by ',' (without spaces) where to look for the executable task if"
-         " it is not found in the project. Instead of passing this option an environment variable"
-         " with the name DEPS_FALLBACK_PATHS can be used.")
+    '--continue-on-failure', is_flag=True,
+    help='Continue processing commands even when one fail (if some command fail the return value'
+         ' will be non zero).')
 @click.option(
     '--ignore-projects', default='', envvar='DEPS_IGNORE_PROJECTS',
-    help="List of project names, separated by ',' (without spaces), of projects to ignore when"
-         " looking for dependencies and will not recurse into those projects. Instead of passing"
-         " this option an environment variable with the name DEPS_IGNORE_PROJECTS can be used.")
+    help='List of project\'s names to ignore when looking for dependencies and will not recurse'
+         ' into those projects. Instead of passing this option an environment variable with the'
+         ' name DEPS_IGNORE_PROJECTS can be used.')
+@click.option(
+    '--force-color', is_flag=True, envvar='DEPS_FORCE_COLOR',
+    help='Always use colors on output (by default it is detected if running on a terminal). If file'
+         ' redirection is used ANSI escape sequences are output even on windows. Instead of passing'
+         ' this option an environment variable with the name DEPS_FORCE_COLOR can be used.')
 def cli(
     command,
     projects,
     pretty_print,
-    ignore_filter,
-    if_exist,
+    require_file,
     here,
     dry_run,
     verbose,
-    fallback_paths,
+    continue_on_failure,
     ignore_projects,
+    force_color,
 ):
     """
     Program to list dependencies of a project, or to execute a command for
@@ -276,227 +468,93 @@ def cli(
 
           deps [parameters] <command>
 
-        \b
+      To prevent deps to process any option or flags passed to command a "--" can be used
+
+          deps [parameters] -- <command> --with --flags
+
+      \b
         <command> may contain some variables:
           * {name}: The dependency bare name (ex.: eden)
           * {abs}:  The dependency absolute path (ex.: X:\\ws\\eden)
 
-      Note that if the first command word is an existing executable file
-      relative to the current directory, it will automatically skip
-      dependencies that do not have this file inside.
+    If the option --require-file is used dependencies not having a file named as this relative to
+    the given dependency root directory are skipped:
+
+          deps --require-file Makefile -- make clean
+
+    List options should be passed as a list separated by "," or the system path separator (without
+    spaces, if spaces are required the value must be properly escaped as if must be a single
+    argument):
+
+      \b
+        deps -p my_project,cool_project
+        deps -p "c:\project;c:\other project" (on windows)
+        deps -p '~/project:~/other project' (on linux)
+
     """
-    # Parse arguments that are lists.
-    def get_list_from_argument(value, separator):
-        """
-        :type value: unicode
-        :type separator: unicode
-        :rtype: list(unicode)
-        :return: The list obtained from `value` (can be empty if `value` is empty).
-        """
-        return value.split(',') if len(separator) > 0 else []
+    global _click_echo_color
+    original_auto_wrap_for_ansi = click.utils.auto_wrap_for_ansi
+    try:
+        if force_color:
+            _click_echo_color = True
+            if sys.platform == 'win32':
+                # Click always wrap the output stream on windows calling
+                # `click.utils.auto_wrap_for_ansi`, setting to `None` causes ansi escape codes to
+                # be output.
+                click.utils.auto_wrap_for_ansi = None
 
-    directories = find_directories(get_list_from_argument(projects, ','))
-    fallback_paths = get_list_from_argument(fallback_paths, ',')
-    ignore_projects = get_list_from_argument(ignore_projects, ',')
+        directories = find_directories(get_list_from_argument(projects))
+        ignore_projects = get_list_from_argument(ignore_projects)
 
-    # find dependencies recursively for each directory
-    # (if we ever need something fancier, there is "pycosat" or "networkx" to solve this stuff)
-    all_deps = {}
+        root_deps = obtain_all_dependecies_recursively(directories, ignore_projects)
 
-    def add_deps_from_directories(directories, list_to_add_deps):
-        """
-        A data structure (`Dep`) is created for each project rooted in the given directories.
+        if pretty_print:
+            # We don't need them in order to pretty print.
+            pretty_print_dependency_tree(root_deps)
+            return 0
 
-        :param sequence(unicode) directories: projects' roots to use
-        :param list(Dep) list_to_add_deps: a list to be populated with the created `Dep`s
-        processed `Dep`s (in case multiple projects have the same dependency)
-        """
-        for dep_directory in directories:
-            if dep_directory not in all_deps:
-                dep = create_new_dep_from_directory(dep_directory, ignore_projects)
-                all_deps[dep_directory] = dep
-                if not dep.ignored:
-                    current_dep_directories = get_shallow_dependencies_directories(
-                        dep_directory)
-                    add_deps_from_directories(current_dep_directories, dep.deps)
-            else:
-                dep = all_deps[dep_directory]
-            list_to_add_deps.append(dep)
-
-    root_deps = []
-    add_deps_from_directories(directories, root_deps)
-
-    if pretty_print:
-        already_printed = set()
-
-        legend = textwrap.dedent('''\
-            # - project_name: listed or target of command execution;
-            # - (project_name): have already been printed in the tree;
-            # - <project_name>: have been ignored (see `--ignored-projects` option);
-        ''')
-        print(legend)
-
-        def print_formatted_dep(name, identation, name_template='{}'):
-            print(identation + name_template.format(name))
-
-        def print_deps(dep_list, indentation_size=0, indentation_string='    '):
-            indentation = indentation_string * indentation_size
-            next_indentation_size = indentation_size + 1
-            for dep in dep_list:
-                if dep.ignored:
-                    print_formatted_dep(dep.name, indentation, '<{}>')
-                    continue
-                if dep.abspath not in already_printed:
-                    print_formatted_dep(dep.name, indentation)
-                    already_printed.add(dep.abspath)
-                    print_deps(dep.deps, next_indentation_size, indentation_string)
-                else:
-                    print_formatted_dep(dep.name, indentation, '({})')
-        print_deps(root_deps)
-        sys.exit(0)
-
-    # get dependencies in order
-    already_walked = set()
-    deps_in_order = []
-
-    def walk_deps(dep_list):
-        """
-        Recursively list the given `Dep`s' dependencies populating `deps_in_order` from the deepest
-        dependency to the root project, no dependency/project is added twice.
-        :param sequence(Dep) dep_list: the dependencies/projects to list dependencies (recursively)
-        """
-        for dep in dep_list:
-            if dep.abspath not in already_walked:
-                already_walked.add(dep.abspath)
-                if len(dep.deps) != 0 and not all(d.abspath in already_walked for d in dep.deps):
-                    walk_deps(dep.deps)
-                deps_in_order.append(dep)
-
-    walk_deps(root_deps)
-
-    if not command:
-        print('\n'.join(dep.name for dep in deps_in_order if not dep.ignored))
-        sys.exit(0)
-
-    #=========================================================================
-    # execution
-    #=========================================================================
-
-    filter_if_exist = []
-    if if_exist:
-        filter_if_exist.extend(if_exist)
-
-    def format_command(command, dep):
-        """
-        Process the variables in command.
-        :type command: unicode | sequence(unicode)
-        :type dep: Dep
-        :rtype: unicode | list(unicode)
-        """
-        format_dict = {
-            'name': dep.name, 'abs': dep.abspath}
-
-        def _format(s, format_dict):
+        def required_files_filter(dependency, quiet):
             """
-            :type s: unicode
-            :type format_dict: dict(unicode,unicode)
-            :rtype: unicode
+            :type dependency: Dep
+            :type quiet: bool
+
+            :return: `True` if the necessary files/folders are present, `False` otherwise.
             """
-            for key, item in format_dict.iteritems():
-                s = s.replace('{' + key + '}', item)
-            return s
+            for f in require_file:
+                file_to_check = os.path.join(dependency.abspath, format_command(f, dependency))
+                if not os.path.isfile(file_to_check) and not os.path.isdir(file_to_check):
+                    if not quiet:
+                        msg = '{}: skipping since "{}" does not exist'
+                        msg = msg.format(dependency.name, file_to_check)
+                        click.secho(msg, fg='cyan', color=_click_echo_color)
+                    return False
+            return True
 
-        if isinstance(command, (list, tuple)):
-            return [_format(a, format_dict) for a in command]
-        else:
-            return _format(command, format_dict)
+        deps_in_order = obtain_dependencies_ordered_for_execution(root_deps)
 
-    # check if command is an executable relative to dependency working dir
+        if not command:
+            deps_to_output = [
+                dep.name for dep in deps_in_order
+                if not dep.ignored and required_files_filter(dep, quiet=True)
+            ]
+            print('\n'.join(deps_to_output))
+            return 0
 
-    first_dep = root_deps[0]
-    first_working_dir = first_dep.abspath
-    first_command = command[0]
-    expanded_first_command = format_command(first_command, first_dep)
-
-    command_must_be_executable, interpreter = is_executable_and_get_interpreter(
-        [first_working_dir] + fallback_paths,
-        expanded_first_command,
-    )
-    if ignore_filter:
-        command_must_be_executable = False
-        filter_if_exist = []
-
-    def pass_filter(dep):
-        """
-        :type dep: Dep
-        :return: `True` if the necessary files/folders are present, `False` otherwise.
-        """
-        for f in filter_if_exist:
-            file_to_check = os.path.join(dep.abspath, format_command(f, dep))
-            if not os.path.isfile(file_to_check) and not os.path.isdir(file_to_check):
-                return False
-        return True
-
-    # execute command for each dependency
-    for dep in deps_in_order:
-        click.secho('\n' + '=' * MAX_LINE_LENGTH, fg='black', bold=True)
-        if dep.ignored:
-            click.secho('{}: ignored'.format(dep.name), fg='cyan')
-            continue
-
-        working_dir = None
-        if not here:
-            working_dir = dep.abspath
-
-        formatted_command = format_command(command, dep)
-
-        is_executable, interpreter = is_executable_and_get_interpreter(
-            [dep.abspath], formatted_command[0])
-
-        skip = not pass_filter(dep) or (working_dir and not os.path.isdir(working_dir))
-        if (
-                not skip and  # Just if not already skipping.
-                command_must_be_executable and
-                not is_executable  # Will need fallback.
-        ):
-            for fallback in fallback_paths:
-                is_executable, interpreter = is_executable_and_get_interpreter(
-                    [fallback], formatted_command[0])
-                if is_executable:
-                    formatted_command[0] = os.path.join(fallback, formatted_command[0])
-                    break
-            else:
-                skip = True  # No fallback found, skip.
-        if skip:
-            click.secho('{}: skipping'.format(dep.name), fg='cyan')
-            continue
-        click.secho('{}:'.format(dep.name), fg='cyan', bold=True)
-
-        if interpreter:
-            formatted_command.insert(0, interpreter)
-
-        if verbose or dry_run:
-            command_to_print = ' '.join(
-                arg.replace(' ', '\\ ') for arg in formatted_command)
-            echo_verbose_msg('executing: ' + command_to_print)
-            if working_dir:
-                echo_verbose_msg('from:      ' + working_dir)
-
-        if not dry_run:
-            if not sys.platform.startswith('win'):
-                import pipes
-                for index, item in enumerate(formatted_command):
-                    formatted_command[index] = pipes.quote(item)
-                formatted_command = ' '.join(formatted_command)
-
-            with cd(working_dir):
-                process = shell_execute(formatted_command)
-
-            if verbose:
-                echo_verbose_msg('return code: {}'.format(process.returncode))
-            if process.returncode != 0:
-                echo_error('Command failed')
-                sys.exit(process.returncode)
+        # Execution.
+        execution_return = execute_command_in_dependencies(
+            command,
+            deps_in_order,
+            required_files_filter=required_files_filter,
+            dry_run=dry_run,
+            verbose=verbose,
+            continue_on_failure=continue_on_failure,
+            here=here,
+        )
+        execution_return = sorted(execution_return, key=abs)
+        sys.exit(execution_return[-1] if execution_return else 1)
+    finally:
+        _click_echo_color = None
+        click.utils.auto_wrap_for_ansi = original_auto_wrap_for_ansi
 
 
 def shell_execute(command):
@@ -507,6 +565,7 @@ def shell_execute(command):
     piping is not an option.
 
     :type command: unicode | list(unicode)
+
     :rtype: subprocess.Popen
     :return: the process object used to run the command.
     """

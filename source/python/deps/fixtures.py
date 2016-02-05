@@ -3,13 +3,13 @@ from click.testing import CliRunner
 import pytest
 
 
-@pytest.fixture
+@pytest.yield_fixture
 def cli_runner():
     """
     Fixture used to test click applications.
     :rtype: click.testing.CliRunner
     """
-    return CliRunner()
+    yield CliRunner()
 
 
 @pytest.fixture
