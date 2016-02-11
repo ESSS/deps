@@ -12,7 +12,7 @@ import textwrap
 
 PROG_NAME = 'deps'
 PROG_MSG_PREFIX = PROG_NAME + ': '
-MAX_LINE_LENGTH = 79
+MAX_LINE_LENGTH = 119
 
 _click_echo_color = None
 
@@ -345,7 +345,8 @@ def execute_command_in_dependencies(
 
         # Checks before execution.
         if dep.ignored:
-            click.secho('{}: ignored'.format(dep.name), fg='cyan', color=_click_echo_color)
+            click.secho(dep.name, fg='blue', bold=True, color=_click_echo_color, nl=False)
+            click.secho(' ignored', fg='yellow', color=_click_echo_color)
             continue
 
         if not required_files_filter(dep, quiet=False):
@@ -357,7 +358,7 @@ def execute_command_in_dependencies(
         if not here:
             working_dir = dep.abspath
 
-        click.secho('{}:'.format(dep.name), fg='cyan', bold=True, color=_click_echo_color)
+        click.secho(dep.name, fg='blue', bold=True, color=_click_echo_color)
         if verbose or dry_run:
             command_to_print = ' '.join(
                 arg.replace(' ', '\\ ') for arg in formatted_command)
@@ -399,7 +400,7 @@ def get_list_from_argument(value):
 
 @click.command(name=PROG_NAME)
 @click.argument('command', nargs=-1)
-@click.version_option('0.3')
+@click.version_option('0.4')
 @click.option(
     '--projects', '-p', default='.',
     help="List of projects.")
