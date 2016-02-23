@@ -10,6 +10,9 @@ import sys
 import textwrap
 
 
+click.disable_unicode_literals_warning = True
+
+
 PROG_NAME = 'deps'
 PROG_MSG_PREFIX = PROG_NAME + ': '
 MAX_LINE_LENGTH = 119
@@ -400,7 +403,7 @@ def get_list_from_argument(value):
 
 @click.command(name=PROG_NAME)
 @click.argument('command', nargs=-1)
-@click.version_option('0.4')
+@click.version_option('0.5')
 @click.option(
     '--projects', '-p', default='.',
     help="List of projects.")

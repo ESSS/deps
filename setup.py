@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 setup(
     name='deps',
-    version='0.4',
+    version='0.5',
     description='A tool to manipulate the dependencies and the project itself',
     author='ESSS',
     author_email='dev@esss.com.br',
