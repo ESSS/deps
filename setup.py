@@ -1,7 +1,13 @@
 from setuptools import setup, find_packages
+
+other_locals = {}
+with open('source/python/deps/version.py') as f:
+    exec(f.read(), None, other_locals)
+version = other_locals['__version__']
+
 setup(
     name='deps',
-    version='0.5',
+    version=version,
     description='A tool to manipulate the dependencies and the project itself',
     author='ESSS',
     author_email='dev@esss.com.br',
