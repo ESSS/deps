@@ -149,26 +149,22 @@ def test_execution_on_project_dir(cli_runner, project_tree, monkeypatch):
     assert result.exit_code == 0
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
-        '===============================================================================',
-        'dep_z:',
+        'dep_z',
         'deps: executing: python -c "name:\\ dep_z"',
         'deps: from:      *[\\/]test_projects0[\\/]dep_z',
         'deps: return code: 0',
-        '',
-        '===============================================================================',
-        'dep_b.1.1:',
+
+        'dep_b.1.1',
         'deps: executing: python -c "name:\\ dep_b.1.1"',
         'deps: from:      *[\\/]test_projects0[\\/]dep_b.1.1',
         'deps: return code: 0',
-        '',
-        '===============================================================================',
-        'dep_b.1:',
+
+        'dep_b.1',
         'deps: executing: python -c "name:\\ dep_b.1"',
         'deps: from:      *[\\/]test_projects0[\\/]dep_b.1',
         'deps: return code: 0',
-        '',
-        '===============================================================================',
-        'root_b:',
+
+        'root_b',
         'deps: executing: python -c "name:\\ root_b"',
         'deps: from:      *[\\/]test_projects0[\\/]root_b',
         'deps: return code: 0',
@@ -188,23 +184,19 @@ def test_here_flag(cli_runner, project_tree, monkeypatch):
     matcher = LineMatcher(result.output.splitlines())
     # Current working directory is not changed.
     matcher.fnmatch_lines([
-        '===============================================================================',
-        'dep_z:',
+        'dep_z',
         'deps: executing: python -c "name:\\ dep_z"',
         'deps: return code: 0',
-        '',
-        '===============================================================================',
-        'dep_b.1.1:',
+
+        'dep_b.1.1',
         'deps: executing: python -c "name:\\ dep_b.1.1"',
         'deps: return code: 0',
-        '',
-        '===============================================================================',
-        'dep_b.1:',
+
+        'dep_b.1',
         'deps: executing: python -c "name:\\ dep_b.1"',
         'deps: return code: 0',
-        '',
-        '===============================================================================',
-        'root_b:',
+
+        'root_b',
         'deps: executing: python -c "name:\\ root_b"',
         'deps: return code: 0',
     ])
@@ -248,22 +240,18 @@ def test_script_execution(cli_runner, project_tree, piped_shell_execute):
     assert result.exit_code == 0, result.output
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
-        '===============================================================================',
-        'dep_z:',
+        'dep_z',
         'deps: executing: tasks[\\/]asd dep_z *[\\/]test_projects0[\\/]dep_z',
         'deps: from:      *[\\/]test_projects0[\\/]dep_z',
         'Sample script dep_z *[\\/]test_projects0[\\/]dep_z',
         '',
         'deps: return code: 0',
-        '',
-        '===============================================================================',
+
         'dep_b.1.1: skipping since "*[\\/]tasks[\\/]asd" does not exist',
-        '',
-        '===============================================================================',
+
         'dep_b.1: skipping since "*[\\/]tasks[\\/]asd" does not exist',
-        '',
-        '===============================================================================',
-        'root_b:',
+
+        'root_b',
         'deps: executing: tasks[\\/]asd root_b *[\\/]test_projects0[\\/]root_b',
         'deps: from:      *[\\/]test_projects0[\\/]root_b',
         'Sample script root_b *[\\/]test_projects0[\\/]root_b',
@@ -285,8 +273,7 @@ def test_script_return_code(cli_runner, project_tree, piped_shell_execute):
     assert result.exit_code != 0
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
-        '===============================================================================',
-        'dep_z:',
+        'dep_z',
         'deps: executing: tasks[\\/]does-not-exist dep_z *[\\/]test_projects0[\\/]dep_z',
         'deps: from:      *[\\/]test_projects0[\\/]dep_z',
         'deps: return code: *',
@@ -360,20 +347,17 @@ def test_ignore_projects(
 
     result = cli_runner.invoke(deps_cli.cli, command_args, env=extra_env)
     assert result.exit_code == 0
+    print result.output
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
-        '===============================================================================',
-        'dep_a.1: ignored',
-        '',
-        '===============================================================================',
-        'dep_z: ignored',
-        '',
-        '===============================================================================',
-        'dep_a.2:',
+        'dep_a.1 ignored',
+
+        'dep_z ignored',
+
+        'dep_a.2',
         'test dep_a.2',
-        '',
-        '===============================================================================',
-        'root_a:',
+
+        'root_a',
         'test root_a',
     ])
 
@@ -406,7 +390,7 @@ def test_require_file(cli_runner, project_tree, piped_shell_execute):
     assert result.exit_code == 0, result.output
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
-        'dep_z:',
+        'dep_z',
         'deps: executing: echo This is dep_z',
         'deps: from:      *[\\/]test_projects0[\\/]dep_z',
         'This is dep_z',
@@ -416,7 +400,7 @@ def test_require_file(cli_runner, project_tree, piped_shell_execute):
 
         'dep_b.1: skipping since "*[\\/]test_projects0[\\/]dep_b.1[\\/]tasks[\\/]asd" does not exist',
 
-        'root_b:',
+        'root_b',
         'deps: executing: echo This is root_b',
         'deps: from:      *[\\/]test_projects0[\\/]root_b',
         'This is root_b',
@@ -449,16 +433,16 @@ def test_continue_on_failue(cli_runner, project_tree, piped_shell_execute):
     assert result.exit_code != 0, result.output
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
-        'dep_z:',
+        'dep_z',
         'deps: error: Command failed',
 
-        'dep_b.1.1:',
+        'dep_b.1.1',
         'deps: error: Command failed',
 
-        'dep_b.1:',
+        'dep_b.1',
         'deps: error: Command failed',
 
-        'root_b:',
+        'root_b',
         'deps: error: Command failed',
     ])
 
@@ -472,15 +456,15 @@ def test_continue_on_failue(cli_runner, project_tree, piped_shell_execute):
     assert result.exit_code != 0, result.output
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
-        'dep_z:',
+        'dep_z',
 
-        'dep_b.1.1:',
+        'dep_b.1.1',
         'deps: error: Command failed',
 
-        'dep_b.1:',
+        'dep_b.1',
         'deps: error: Command failed',
 
-        'root_b:',
+        'root_b',
     ])
 
     # None fail.
