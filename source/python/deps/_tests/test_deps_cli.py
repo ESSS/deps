@@ -121,6 +121,7 @@ def test_cant_find_root(cli_runner, project_tree, piped_shell_execute):
     proj_dir = unicode(project_tree.join('not_a_project'))
     command_args = ['-p', proj_dir, 'echo', 'Hi', '{name}!']
     result = cli_runner.invoke(deps_cli.cli, command_args)
+    assert result.exception is None or isinstance(result.exception, SystemExit)
     assert result.exit_code != 0
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
@@ -130,6 +131,7 @@ def test_cant_find_root(cli_runner, project_tree, piped_shell_execute):
     proj_dir = unicode(project_tree.join('not_a_valid_folder'))
     command_args = ['-p', proj_dir, 'echo', 'Hi', '{name}!']
     result = cli_runner.invoke(deps_cli.cli, command_args)
+    assert result.exception is None or isinstance(result.exception, SystemExit)
     assert result.exit_code != 0
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([

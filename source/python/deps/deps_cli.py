@@ -196,9 +196,9 @@ def find_directories(raw_directories):
     for raw_dir in raw_directories:
         directory = find_ancestor_dir_with(FILE_WITH_DEPENDENCIES, raw_dir)
         if directory is None:
-            echo_error('could not find "{}" for "{}".'.format(
-                FILE_WITH_DEPENDENCIES, raw_dir))
-            raise click.ClickException()
+            msg = 'could not find "{}" for "{}".'.format(FILE_WITH_DEPENDENCIES, raw_dir)
+            echo_error(msg)
+            raise click.ClickException(msg)
         directories.append(directory)
 
     return directories
