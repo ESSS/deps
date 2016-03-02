@@ -433,7 +433,7 @@ def get_list_from_argument(value):
          ' into those projects. Instead of passing this option an environment variable with the'
          ' name DEPS_IGNORE_PROJECTS can be used.')
 @click.option(
-    '--force-color', is_flag=True, envvar='DEPS_FORCE_COLOR',
+    '--force-color/--no-force-color', is_flag=True, envvar='DEPS_FORCE_COLOR',
     help='Always use colors on output (by default it is detected if running on a terminal). If file'
          ' redirection is used ANSI escape sequences are output even on windows. Instead of passing'
          ' this option an environment variable with the name DEPS_FORCE_COLOR can be used.')

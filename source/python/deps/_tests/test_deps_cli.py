@@ -283,27 +283,33 @@ def test_script_return_code(cli_runner, project_tree, piped_shell_execute):
     ])
 
 
+@pytest.mark.parametrize('force', [
+    True,
+    False,
+])
 @pytest.mark.parametrize('use_env_var', [
     True,
     False,
 ])
 def test_force_color(
     use_env_var,
+    force,
     cli_runner,
     project_tree,
     piped_shell_execute,
 ):
     """
     :type use_env_var: bool
+    :type force: bool
     :type cli_runner: click.testing.CliRunner
     :type project_tree: py.path.local
     :type piped_shell_execute: mocker.patch
     """
     def configure_force_color():
         if use_env_var:
-            extra_env[b'DEPS_FORCE_COLOR'] = b'1'
+            extra_env[b'DEPS_FORCE_COLOR'] = b'1' if force else b'0'
         else:
-            command_args.insert(0, '--force-color')
+            command_args.insert(0, '--force-color' if force else '--no-force-color')
 
     root_b = unicode(project_tree.join('root_b'))
     # Prepare the invocation.
@@ -317,7 +323,7 @@ def test_force_color(
     output_repr = repr(result.output)
     # CSI for Control Sequence Introducer (or Control Sequence Initiator).
     ansi_csi_repr = '\\x1b['
-    assert ansi_csi_repr in output_repr
+    assert (ansi_csi_repr in output_repr) == force
 
 
 @pytest.mark.parametrize('use_env_var', [
