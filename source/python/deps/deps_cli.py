@@ -98,8 +98,6 @@ def get_shallow_dependencies_directories(base_directory):
 # ==================================================================================================
 Dep = namedtuple('Dep', 'name,abspath,deps,ignored')
 
-Repo = namedtuple('Repo', 'name,abspath,deps,ignored')
-
 
 def create_new_dep_from_directory(directory, ignore_projects):
     """
@@ -245,18 +243,26 @@ def obtain_all_dependecies_recursively(root_directories, ignored_projects):
     return root_deps
 
 
-
-
 def obtain_repos(dep_list):
+    """
+    Obtaim the repos for the given projects and their dependencies.
+    :param list(Dep) dep_list:
+    :rtype: list(Dep)
+    """
     all_repos = {}
 
     def obtain_repo_from_dep(dep):
+        """
+        :param Dep dep: A project.
+        :rtype: Dep
+        :return: The repository for the given project. Conserve the `ignored` property.
+        """
         directory = find_ancestor_dir_with('.git', dep.abspath)
         directory = os.path.abspath(directory)
         name = os.path.split(directory)[1]
         repo_key = (name, dep.ignored)
         if repo_key not in all_repos:
-            all_repos[repo_key] = Repo(
+            all_repos[repo_key] = Dep(
                 name=name,
                 abspath=directory,
                 deps=[],
@@ -267,6 +273,10 @@ def obtain_repos(dep_list):
     visited_deps = []
 
     def convert_deps_to_repos(deps, list_of_repos):
+        """
+        :param list(Dep) deps:
+        :param list(Dep) list_of_repos: This list will contain the converted repos (is changed).
+        """
         for dep in deps:
             if dep in visited_deps:
                 continue
