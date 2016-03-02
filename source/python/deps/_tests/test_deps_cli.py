@@ -17,17 +17,24 @@ def project_tree(tmpdir_factory):
     test_projects = tmpdir_factory.mktemp('test_projects')
     projects = {
         'root_a': ['dep_a.1', 'dep_a.2'],
-        'root_b': ['dep_b.1'],
+        'root_b': ['bs/dep_b.1'],
         'dep_a.1': ['dep_a.1.1', 'dep_a.1.2'],
         'dep_a.2': ['dep_z'],
         'dep_a.1.1': ['dep_z'],
         'dep_a.1.2': ['dep_z'],
-        'dep_b.1': ['dep_b.1.1'],
-        'dep_b.1.1': ['dep_z'],
+        'bs/dep_b.1': ['dep_b.1.1'],
+        'bs/dep_b.1.1': ['../dep_z'],
         'dep_z': [],
+        'root_c': ['cs1/dep_c1.1'],
+        'cs1/dep_c1.1': ['dep_c1.2'],
+        'cs1/dep_c1.2': ['dep_c1.3', 'dep_c1.1'],
+        'cs1/dep_c1.3': ['dep_c1.1', '../cs2/dep_c2.1'],
+        'cs2/dep_c2.1': ['../cs1/dep_c1.2'],
     }
     for proj, deps in projects.iteritems():
-        proj_dir = test_projects.mkdir(proj)
+        proj_path = proj.split('/')
+        proj_dir = test_projects.ensure(*proj_path, dir=True)
+        test_projects.ensure(proj_path[0], '.git', dir=True)  # Fake git repo.
         env_yml = proj_dir.join('environment.yml')
         env_content = ['name: {}'.format(proj), '']
         if len(deps) > 0:
@@ -158,12 +165,12 @@ def test_execution_on_project_dir(cli_runner, project_tree, monkeypatch):
 
         'dep_b.1.1',
         'deps: executing: python -c "name:\\ dep_b.1.1"',
-        'deps: from:      *[\\/]test_projects0[\\/]dep_b.1.1',
+        'deps: from:      *[\\/]test_projects0[\\/]bs[\\/]dep_b.1.1',
         'deps: return code: 0',
 
         'dep_b.1',
         'deps: executing: python -c "name:\\ dep_b.1"',
-        'deps: from:      *[\\/]test_projects0[\\/]dep_b.1',
+        'deps: from:      *[\\/]test_projects0[\\/]bs[\\/]dep_b.1',
         'deps: return code: 0',
 
         'root_b',
@@ -404,9 +411,9 @@ def test_require_file(cli_runner, project_tree, piped_shell_execute):
         'This is dep_z',
         'deps: return code: 0',
 
-        'dep_b.1.1: skipping since "*[\\/]test_projects0[\\/]dep_b.1.1[\\/]tasks[\\/]asd" does not exist',
+        'dep_b.1.1: skipping since "*[\\/]test_projects0[\\/]bs[\\/]dep_b.1.1[\\/]tasks[\\/]asd" does not exist',
 
-        'dep_b.1: skipping since "*[\\/]test_projects0[\\/]dep_b.1[\\/]tasks[\\/]asd" does not exist',
+        'dep_b.1: skipping since "*[\\/]test_projects0[\\/]bs[\\/]dep_b.1[\\/]tasks[\\/]asd" does not exist',
 
         'root_b',
         'deps: executing: echo This is root_b',
@@ -482,4 +489,69 @@ def test_continue_on_failue(cli_runner, project_tree, piped_shell_execute):
     assert 'deps: error: Command failed' not in result.output
 
 
+def test_list_repos(cli_runner, project_tree, piped_shell_execute):
+    """
+    :type cli_runner: click.testing.CliRunner
+    :type project_tree: py.path.local
+    :type piped_shell_execute: mocker.patch
+    """
+    root = unicode(project_tree.join('root_c'))
+    base_args = ['-p', root, '--list-repositories']
+
+    command_args = base_args
+    result = cli_runner.invoke(deps_cli.cli, command_args)
+    assert result.exit_code == 0, result.output
+    assert result.output == textwrap.dedent(
+        '''\
+        cs2
+        cs1
+        root_c
+        '''
+    )
+
+
+    base_args = ['-p', root, '--list-repositories']
+    # Test pretty print.
+    command_args = base_args + ['-pp']
+    result = cli_runner.invoke(deps_cli.cli, command_args)
+    assert result.exit_code == 0, result.output
+    assert result.output == textwrap.dedent(
+        '''\
+        # - project_name: listed or target of command execution;
+        # - (project_name): have already been printed in the tree;
+        # - <project_name>: have been ignored (see `--ignored-projects` option);
+
+        root_c
+            cs1
+                cs2
+                (cs1)
+        '''
+    )
+
+
+def test_list_repos_with_ignored_project(cli_runner, project_tree, piped_shell_execute):
+    """
+    :type cli_runner: click.testing.CliRunner
+    :type project_tree: py.path.local
+    :type piped_shell_execute: mocker.patch
+    """
+    root = unicode(project_tree.join('root_c'))
+    base_args = ['-p', root, '--list-repositories']
+
+    base_args = ['-p', root, '--list-repositories', '--ignore-projects=dep_c1.3']
+    # Test pretty print.
+    command_args = base_args + ['-pp']
+    result = cli_runner.invoke(deps_cli.cli, command_args)
+    assert result.exit_code == 0, result.output
+    assert result.output == textwrap.dedent(
+        '''\
+        # - project_name: listed or target of command execution;
+        # - (project_name): have already been printed in the tree;
+        # - <project_name>: have been ignored (see `--ignored-projects` option);
+
+        root_c
+            cs1
+                <cs1>
+        '''
+    )
 

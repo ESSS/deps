@@ -98,6 +98,8 @@ def get_shallow_dependencies_directories(base_directory):
 # ==================================================================================================
 Dep = namedtuple('Dep', 'name,abspath,deps,ignored')
 
+Repo = namedtuple('Repo', 'name,abspath,deps,ignored')
+
 
 def create_new_dep_from_directory(directory, ignore_projects):
     """
@@ -241,6 +243,49 @@ def obtain_all_dependecies_recursively(root_directories, ignored_projects):
     root_deps = []
     add_deps_from_directories(root_directories, root_deps)
     return root_deps
+
+
+
+
+def obtain_repos(dep_list):
+    all_repos = {}
+
+    def obtain_repo_from_dep(dep):
+        directory = find_ancestor_dir_with('.git', dep.abspath)
+        directory = os.path.abspath(directory)
+        name = os.path.split(directory)[1]
+        repo_key = (name, dep.ignored)
+        if repo_key not in all_repos:
+            all_repos[repo_key] = Repo(
+                name=name,
+                abspath=directory,
+                deps=[],
+                ignored=dep.ignored,
+            )
+        return all_repos[repo_key]
+
+    visited_deps = []
+
+    def convert_deps_to_repos(deps, list_of_repos):
+        for dep in deps:
+            if dep in visited_deps:
+                continue
+            visited_deps.append(dep)
+            repo = obtain_repo_from_dep(dep)
+            convert_deps_to_repos(dep.deps, repo.deps)
+            if repo not in list_of_repos:
+                list_of_repos.append(repo)
+        # Avoid to list a repo as ignored and not ignored in the same list.
+        for repo_dep in list_of_repos[:]:
+            if repo_dep.ignored and [
+                e for e in repo.deps
+                if repo_dep.name == e.name and not e.ignored
+            ]:
+                list_of_repos.remove(repo)
+
+    root_repos = []
+    convert_deps_to_repos(dep_list, root_repos)
+    return root_repos
 
 
 def obtain_dependencies_ordered_for_execution(root_deps):
@@ -437,6 +482,10 @@ def get_list_from_argument(value):
     help='Always use colors on output (by default it is detected if running on a terminal). If file'
          ' redirection is used ANSI escape sequences are output even on windows. Instead of passing'
          ' this option an environment variable with the name DEPS_FORCE_COLOR can be used.')
+@click.option(
+    '--list-repositories', is_flag=True,
+    help='Instead of projects the enumeration procedure will use the containing repositories'
+         ' instead of projects them selves')
 def cli(
     command,
     projects,
@@ -448,6 +497,7 @@ def cli(
     continue_on_failure,
     ignore_projects,
     force_color,
+    list_repositories,
 ):
     """
     Program to list dependencies of a project, or to execute a command for
@@ -512,6 +562,8 @@ def cli(
         ignore_projects = get_list_from_argument(ignore_projects)
 
         root_deps = obtain_all_dependecies_recursively(directories, ignore_projects)
+        if list_repositories:
+            root_deps = obtain_repos(root_deps)
 
         if pretty_print:
             # We don't need them in order to pretty print.
