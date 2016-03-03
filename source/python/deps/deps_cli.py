@@ -259,11 +259,10 @@ def obtain_repos(dep_list):
         """
         directory = find_ancestor_dir_with('.git', dep.abspath)
         directory = os.path.abspath(directory)
-        name = os.path.split(directory)[1]
-        repo_key = (name, dep.ignored)
+        repo_key = (directory, dep.ignored)
         if repo_key not in all_repos:
             all_repos[repo_key] = Dep(
-                name=name,
+                name=directory,
                 abspath=directory,
                 deps=[],
                 ignored=dep.ignored,
