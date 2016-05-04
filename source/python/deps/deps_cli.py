@@ -299,7 +299,7 @@ def obtain_repos(dep_list):
 
 def obtain_dependencies_ordered_for_execution(root_deps):
     """
-    Return a list of the dependencies (visited recursively).
+    Return a list of the dependencies.
 
     Ordering:
 
@@ -313,27 +313,64 @@ def obtain_dependencies_ordered_for_execution(root_deps):
     :rtype: list(Dep)
     :return: A list of all projects target to execution.
     """
-    # find dependencies recursively for each directory
-    # (if we ever need something fancier, there is "pycosat" or "networkx" to solve this stuff)
-    already_walked = set()  # bookkeeping.
-    deps_in_order = []
+    from collections import OrderedDict
 
-    def walk_deps(dep_list):
+    def get_all_deps(dep):
         """
-        Recursively list the given `Dep`s' dependencies populating `deps_in_order` from the deepest
-        dependency to the root project, no dependency/project is added twice.
-
-        :param sequence(Dep) dep_list: the dependencies/projects to list dependencies (recursively)
+        List all dependencies (and sub dependencies) of the given dep.
+        :param Dep dep:
+        :rtype: `OrderedDict`
         """
-        for dep in dep_list:
-            if dep.abspath not in already_walked:
-                already_walked.add(dep.abspath)
-                if len(dep.deps) != 0 and not all(d.abspath in already_walked for d in dep.deps):
-                    walk_deps(dep.deps)
-                deps_in_order.append(dep)
+        result = OrderedDict()
+        other_deps = dep.deps[:]
+        while other_deps:
+            next_dep = other_deps.pop()
+            if next_dep.abspath in result:
+                continue
+            result[next_dep.abspath] = next_dep
+            # Not `reversed` results in equally valid results.
+            # But `reversed` results in a more intuitive result IMO.
+            other_deps.extend(reversed(next_dep.deps))
+        return result
 
-    walk_deps(root_deps)
-    return deps_in_order
+    def count_deps(dep):
+        """
+        Count all dependencies (and sub dependencies) of the given dep.
+        :param Dep dep:
+        :rtype: int
+        """
+        already_visited = {dep.abspath}
+        other_deps = dep.deps[:]
+        count = 0
+        while other_deps:
+            next_dep = other_deps.pop()
+            if next_dep.abspath in already_visited:
+                continue
+            count += 1
+            other_deps.extend(next_dep.deps)
+            already_visited.add(next_dep.abspath)
+        return count
+
+    deps = []
+    already_counted_deps = set()
+    for root in root_deps:
+        if root.abspath in already_counted_deps:
+            continue
+        all_deps = get_all_deps(root)
+        # root's deps count.
+        deps_counts = [(root, len(all_deps))]
+        already_counted_deps.add(root.abspath)
+        # sub deps' deps count.
+        for sub_dep_key, sub_dep in all_deps.iteritems():
+            if sub_dep_key in already_counted_deps:
+                continue
+            # Any of `append(...)` and `insert(0, ...)` result in equally valid results.
+            # But `insert(0, ...)` results in a more intuitive result IMO.
+            deps_counts.insert(0, (sub_dep, count_deps(sub_dep)))
+            already_counted_deps.add(sub_dep_key)
+        # use dep count as key and rely on stable sort.
+        deps.extend(sorted(deps_counts, key=lambda v: v[1]))
+    return [dep_element for dep_element, dep_count in deps]
 
 
 def format_command(command, dep):

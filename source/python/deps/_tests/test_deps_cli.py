@@ -119,6 +119,26 @@ def test_no_args(cli_runner, project_tree, monkeypatch):
     )
 
 
+def test_no_args_cyclic_deps(cli_runner, project_tree, monkeypatch):
+    """
+    :type cli_runner: click.testing.CliRunner
+    :type project_tree: py.path.local
+    :type monkeypatch: _pytest.monkeypatch
+    """
+    monkeypatch.chdir(project_tree.join('root_c'))
+    result = cli_runner.invoke(deps_cli.cli)
+    assert result.exit_code == 0, result.output
+    assert result.output == textwrap.dedent(
+        '''\
+        dep_c2.1
+        dep_c1.3
+        dep_c1.2
+        dep_c1.1
+        root_c
+        '''
+    )
+
+
 def test_cant_find_root(cli_runner, project_tree, piped_shell_execute):
     """
     :type cli_runner: click.testing.CliRunner
@@ -224,10 +244,10 @@ def test_multiple_projects(cli_runner, project_tree):
     assert result.output == textwrap.dedent(
         '''\
         dep_z
-        dep_a.1.1
         dep_a.1.2
-        dep_a.1
+        dep_a.1.1
         dep_a.2
+        dep_a.1
         root_a
         dep_b.1.1
         dep_b.1
