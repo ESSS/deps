@@ -218,9 +218,9 @@ def test_multiple_projects(cli_runner, project_tree):
     """
     projects = ['root_a', 'root_b']
     projects = [unicode(project_tree.join(name)) for name in projects]
-    command_args = ['-p', ','.join(projects)]
+    command_args = [('--project=%s' % (project,)) for project in projects]
     result = cli_runner.invoke(deps_cli.cli, command_args)
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     assert result.output == textwrap.dedent(
         '''\
         dep_z

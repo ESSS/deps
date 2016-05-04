@@ -460,8 +460,8 @@ def get_list_from_argument(value):
 @click.argument('command', nargs=-1)
 @click.version_option(__version__)
 @click.option(
-    '--projects', '-p', default='.',
-    help="List of projects.")
+    '--project', '-p', default='.', multiple=True,
+    help="Project to find dependencies of (can be used multiple times).")
 @click.option(
     '--pretty-print', '-pp', is_flag=True,
     help='Pretty print dependencies in a tree.')
@@ -497,7 +497,7 @@ def get_list_from_argument(value):
          ' instead of projects them selves')
 def cli(
     command,
-    projects,
+    project,
     pretty_print,
     require_file,
     here,
@@ -516,7 +516,7 @@ def cli(
     it will use the current, or will find the first ancestor directory
     containing an `environment.yml` file):
 
-          deps -p mylib10,myotherlib20
+          deps -p mylib10 -p myotherlib20
 
       This may be used in combination with shell commands (useful for
       `source`ing files), e.g., to iterate on dependencies in windows (cmd):
@@ -551,9 +551,9 @@ def cli(
     argument):
 
       \b
-        deps -p my_project,cool_project
-        deps -p "c:\project;c:\other project" (on windows)
-        deps -p '~/project:~/other project' (on linux)
+        deps --ignore-projects=my_project,cool_project
+        deps --ignore-projects="c:\project;c:\other project" (on windows)
+        deps --ignore-projects='~/project:~/other project' (on linux)
 
     """
     global _click_echo_color
@@ -567,7 +567,7 @@ def cli(
                 # be output.
                 click.utils.auto_wrap_for_ansi = None
 
-        directories = find_directories(get_list_from_argument(projects))
+        directories = find_directories(project)
         ignore_projects = get_list_from_argument(ignore_projects)
 
         root_deps = obtain_all_dependecies_recursively(directories, ignore_projects)
