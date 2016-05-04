@@ -444,23 +444,11 @@ def execute_command_in_dependencies(
     return exit_codes
 
 
-def get_list_from_argument(value):
-    """
-    :type value: unicode
-
-    :rtype: list(unicode)
-    :return: The list obtained from `value` (can be empty if `value` is empty).
-    """
-    import re
-    item_pattern = '[^,{}]+'.format(os.pathsep)
-    return re.findall(item_pattern, value)
-
-
 @click.command(name=PROG_NAME)
 @click.argument('command', nargs=-1)
 @click.version_option(__version__)
 @click.option(
-    '--project', '-p', default='.', multiple=True,
+    '--project', '-p', default='.', type=click.Path(), multiple=True,
     help="Project to find dependencies of (can be used multiple times).")
 @click.option(
     '--pretty-print', '-pp', is_flag=True,
@@ -482,10 +470,10 @@ def get_list_from_argument(value):
     help='Continue processing commands even when one fail (if some command fail the return value'
          ' will be non zero).')
 @click.option(
-    '--ignore-projects', default='', envvar='DEPS_IGNORE_PROJECTS',
-    help='List of project\'s names to ignore when looking for dependencies and will not recurse'
+    '--ignore-project', type=click.Path(), multiple=True, envvar='DEPS_IGNORE_PROJECT',
+    help='Project name to ignore when looking for dependencies and will not recurse'
          ' into those projects. Instead of passing this option an environment variable with the'
-         ' name DEPS_IGNORE_PROJECTS can be used.')
+         ' name DEPS_IGNORE_PROJECT can be used (can be used multiple times).')
 @click.option(
     '--force-color/--no-force-color', is_flag=True, envvar='DEPS_FORCE_COLOR',
     help='Always use colors on output (by default it is detected if running on a terminal). If file'
@@ -504,7 +492,7 @@ def cli(
     dry_run,
     verbose,
     continue_on_failure,
-    ignore_projects,
+    ignore_project,
     force_color,
     repos,
 ):
@@ -546,15 +534,8 @@ def cli(
 
           deps --require-file Makefile -- make clean
 
-    List options should be passed as a list separated by "," or the system path separator (without
-    spaces, if spaces are required the value must be properly escaped as if must be a single
-    argument):
-
-      \b
-        deps --ignore-projects=my_project,cool_project
-        deps --ignore-projects="c:\project;c:\other project" (on windows)
-        deps --ignore-projects='~/project:~/other project' (on linux)
-
+    When passing parameters that can be used multiple times through environment variable use the
+    operational system path separator (windows=";", linux=":").
     """
     global _click_echo_color
     original_auto_wrap_for_ansi = click.utils.auto_wrap_for_ansi
@@ -568,9 +549,8 @@ def cli(
                 click.utils.auto_wrap_for_ansi = None
 
         directories = find_directories(project)
-        ignore_projects = get_list_from_argument(ignore_projects)
 
-        root_deps = obtain_all_dependecies_recursively(directories, ignore_projects)
+        root_deps = obtain_all_dependecies_recursively(directories, ignore_project)
         if repos:
             root_deps = obtain_repos(root_deps)
 
