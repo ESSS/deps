@@ -496,7 +496,7 @@ def test_list_repos(cli_runner, project_tree, piped_shell_execute):
     :type piped_shell_execute: mocker.patch
     """
     root = unicode(project_tree.join('root_c'))
-    base_args = ['-p', root, '--list-repositories']
+    base_args = ['-p', root, '--repos']
 
     command_args = base_args
     result = cli_runner.invoke(deps_cli.cli, command_args)
@@ -509,7 +509,7 @@ def test_list_repos(cli_runner, project_tree, piped_shell_execute):
     ])
 
 
-    base_args = ['-p', root, '--list-repositories']
+    base_args = ['-p', root, '--repos']
     # Test pretty print.
     command_args = base_args + ['-pp']
     result = cli_runner.invoke(deps_cli.cli, command_args)
@@ -533,9 +533,9 @@ def test_list_repos_with_ignored_project(cli_runner, project_tree, piped_shell_e
     :type piped_shell_execute: mocker.patch
     """
     root = unicode(project_tree.join('root_c'))
-    base_args = ['-p', root, '--list-repositories']
+    base_args = ['-p', root, '--repos']
 
-    base_args = ['-p', root, '--list-repositories', '--ignore-projects=dep_c1.3']
+    base_args = ['-p', root, '--repos', '--ignore-projects=dep_c1.3']
     # Test pretty print.
     command_args = base_args + ['-pp']
     result = cli_runner.invoke(deps_cli.cli, command_args)

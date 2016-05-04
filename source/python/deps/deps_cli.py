@@ -492,7 +492,7 @@ def get_list_from_argument(value):
          ' redirection is used ANSI escape sequences are output even on windows. Instead of passing'
          ' this option an environment variable with the name DEPS_FORCE_COLOR can be used.')
 @click.option(
-    '--list-repositories', is_flag=True,
+    '--repos', is_flag=True,
     help='Instead of projects the enumeration procedure will use the containing repositories'
          ' instead of projects them selves')
 def cli(
@@ -506,7 +506,7 @@ def cli(
     continue_on_failure,
     ignore_projects,
     force_color,
-    list_repositories,
+    repos,
 ):
     """
     Program to list dependencies of a project, or to execute a command for
@@ -571,7 +571,7 @@ def cli(
         ignore_projects = get_list_from_argument(ignore_projects)
 
         root_deps = obtain_all_dependecies_recursively(directories, ignore_projects)
-        if list_repositories:
+        if repos:
             root_deps = obtain_repos(root_deps)
 
         if pretty_print:
