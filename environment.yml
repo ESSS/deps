@@ -3,6 +3,7 @@ name: deps
 dependencies:
   - click
   - colorama
+  - mock <2
   - pytest-mock
   - jinja2
   - pyyaml
