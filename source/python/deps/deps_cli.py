@@ -333,6 +333,24 @@ def obtain_dependencies_ordered_for_execution(root_deps):
             other_deps.extend(reversed(next_dep.deps))
         return result
 
+    def count_deps(dep):
+        """
+        Count all dependencies (and sub dependencies) of the given dep.
+        :param Dep dep:
+        :rtype: int
+        """
+        already_visited = {dep.abspath}
+        other_deps = dep.deps[:]
+        count = 0
+        while other_deps:
+            next_dep = other_deps.pop()
+            if next_dep.abspath in already_visited:
+                continue
+            count += 1
+            other_deps.extend(next_dep.deps)
+            already_visited.add(next_dep.abspath)
+        return count
+
     deps = []
     already_counted_deps = set()
     for root in root_deps:
@@ -348,7 +366,7 @@ def obtain_dependencies_ordered_for_execution(root_deps):
                 continue
             # Any of `append(...)` and `insert(0, ...)` result in equally valid results.
             # But `insert(0, ...)` results in a more intuitive result IMO.
-            deps_counts.insert(0, (sub_dep, len(get_all_deps(sub_dep))))
+            deps_counts.insert(0, (sub_dep, count_deps(sub_dep)))
             already_counted_deps.add(sub_dep_key)
         # use dep count as key and rely on stable sort.
         deps.extend(sorted(deps_counts, key=lambda v: v[1]))
