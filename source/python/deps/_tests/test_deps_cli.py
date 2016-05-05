@@ -536,9 +536,6 @@ def test_list_repos(cli_runner, project_tree, piped_shell_execute):
     assert result.exit_code == 0, result.output
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
-        '# - project_name: listed or target of command execution;',
-        '# - (project_name): have already been printed in the tree;',
-        '# - <project_name>: have been ignored (see `--ignored-projects` option);',
         '*[\\/]test_projects0[\\/]root_c',
         '    *[\\/]test_projects0[\\/]cs1',
         '        *[\\/]test_projects0[\\/]cs2',
@@ -562,9 +559,6 @@ def test_list_repos_with_ignored_project(cli_runner, project_tree, piped_shell_e
     assert result.exit_code == 0, result.output
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
-        '# - project_name: listed or target of command execution;',
-        '# - (project_name): have already been printed in the tree;',
-        '# - <project_name>: have been ignored (see `--ignored-projects` option);',
         '*[\\/]test_projects0[\\/]root_c',
         '    *[\\/]test_projects0[\\/]cs1',
         '        <*[\\/]test_projects0[\\/]cs1>',
