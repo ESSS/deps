@@ -108,13 +108,33 @@ def test_no_args(cli_runner, project_tree, monkeypatch):
     """
     monkeypatch.chdir(project_tree.join('root_b'))
     result = cli_runner.invoke(deps_cli.cli)
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     assert result.output == textwrap.dedent(
         '''\
         dep_z
         dep_b.1.1
         dep_b.1
         root_b
+        '''
+    )
+
+
+def test_no_args_cyclic_deps(cli_runner, project_tree, monkeypatch):
+    """
+    :type cli_runner: click.testing.CliRunner
+    :type project_tree: py.path.local
+    :type monkeypatch: _pytest.monkeypatch
+    """
+    monkeypatch.chdir(project_tree.join('root_c'))
+    result = cli_runner.invoke(deps_cli.cli)
+    assert result.exit_code == 0, result.output
+    assert result.output == textwrap.dedent(
+        '''\
+        dep_c2.1
+        dep_c1.3
+        dep_c1.2
+        dep_c1.1
+        root_c
         '''
     )
 
@@ -218,16 +238,16 @@ def test_multiple_projects(cli_runner, project_tree):
     """
     projects = ['root_a', 'root_b']
     projects = [unicode(project_tree.join(name)) for name in projects]
-    command_args = ['-p', ','.join(projects)]
+    command_args = [('--project=%s' % (project,)) for project in projects]
     result = cli_runner.invoke(deps_cli.cli, command_args)
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     assert result.output == textwrap.dedent(
         '''\
         dep_z
-        dep_a.1.1
         dep_a.1.2
-        dep_a.1
+        dep_a.1.1
         dep_a.2
+        dep_a.1
         root_a
         dep_b.1.1
         dep_b.1
@@ -351,9 +371,10 @@ def test_ignore_projects(
     """
     def configure_ignored_projects():
         if use_env_var:
-            extra_env[b'DEPS_IGNORE_PROJECTS'] = b'dep_a.1,dep_z'
+            extra_env[b'DEPS_IGNORE_PROJECT'] = b'dep_a.1%sdep_z' % (os.pathsep,)
         else:
-            command_args.insert(0, '--ignore-projects=dep_a.1,dep_z')
+            command_args.insert(0, '--ignore-project=dep_a.1')
+            command_args.insert(1, '--ignore-project=dep_z')
     root_a = unicode(project_tree.join('root_a'))
     # Prepare the invocation.
     command_args = ['-p', root_a, 'echo', 'test', '{name}']
@@ -361,8 +382,7 @@ def test_ignore_projects(
     configure_ignored_projects()
 
     result = cli_runner.invoke(deps_cli.cli, command_args, env=extra_env)
-    assert result.exit_code == 0
-    print result.output
+    assert result.exit_code == 0, result.output
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
         'dep_a.1 ignored',
@@ -496,7 +516,7 @@ def test_list_repos(cli_runner, project_tree, piped_shell_execute):
     :type piped_shell_execute: mocker.patch
     """
     root = unicode(project_tree.join('root_c'))
-    base_args = ['-p', root, '--list-repositories']
+    base_args = ['-p', root, '--repos']
 
     command_args = base_args
     result = cli_runner.invoke(deps_cli.cli, command_args)
@@ -509,16 +529,13 @@ def test_list_repos(cli_runner, project_tree, piped_shell_execute):
     ])
 
 
-    base_args = ['-p', root, '--list-repositories']
+    base_args = ['-p', root, '--repos']
     # Test pretty print.
     command_args = base_args + ['-pp']
     result = cli_runner.invoke(deps_cli.cli, command_args)
     assert result.exit_code == 0, result.output
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
-        '# - project_name: listed or target of command execution;',
-        '# - (project_name): have already been printed in the tree;',
-        '# - <project_name>: have been ignored (see `--ignored-projects` option);',
         '*[\\/]test_projects0[\\/]root_c',
         '    *[\\/]test_projects0[\\/]cs1',
         '        *[\\/]test_projects0[\\/]cs2',
@@ -533,18 +550,15 @@ def test_list_repos_with_ignored_project(cli_runner, project_tree, piped_shell_e
     :type piped_shell_execute: mocker.patch
     """
     root = unicode(project_tree.join('root_c'))
-    base_args = ['-p', root, '--list-repositories']
+    base_args = ['-p', root, '--repos']
 
-    base_args = ['-p', root, '--list-repositories', '--ignore-projects=dep_c1.3']
+    base_args = ['-p', root, '--repos', '--ignore-project=dep_c1.3']
     # Test pretty print.
     command_args = base_args + ['-pp']
     result = cli_runner.invoke(deps_cli.cli, command_args)
     assert result.exit_code == 0, result.output
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
-        '# - project_name: listed or target of command execution;',
-        '# - (project_name): have already been printed in the tree;',
-        '# - <project_name>: have been ignored (see `--ignored-projects` option);',
         '*[\\/]test_projects0[\\/]root_c',
         '    *[\\/]test_projects0[\\/]cs1',
         '        <*[\\/]test_projects0[\\/]cs1>',

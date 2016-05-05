@@ -128,7 +128,7 @@ def pretty_print_dependency_tree(root_deps):
     legend = textwrap.dedent('''\
         # - project_name: listed or target of command execution;
         # - (project_name): have already been printed in the tree;
-        # - <project_name>: have been ignored (see `--ignored-projects` option);
+        # - <project_name>: have been ignored (see `--ignore-project` option);
     ''')
     print(legend)
 
@@ -299,7 +299,7 @@ def obtain_repos(dep_list):
 
 def obtain_dependencies_ordered_for_execution(root_deps):
     """
-    Return a list of the dependencies (visited recursively).
+    Return a list of the dependencies.
 
     Ordering:
 
@@ -313,27 +313,46 @@ def obtain_dependencies_ordered_for_execution(root_deps):
     :rtype: list(Dep)
     :return: A list of all projects target to execution.
     """
-    # find dependencies recursively for each directory
-    # (if we ever need something fancier, there is "pycosat" or "networkx" to solve this stuff)
-    already_walked = set()  # bookkeeping.
-    deps_in_order = []
+    from collections import OrderedDict
 
-    def walk_deps(dep_list):
+    def get_all_deps(dep):
         """
-        Recursively list the given `Dep`s' dependencies populating `deps_in_order` from the deepest
-        dependency to the root project, no dependency/project is added twice.
-
-        :param sequence(Dep) dep_list: the dependencies/projects to list dependencies (recursively)
+        List all dependencies (and sub dependencies) of the given dep.
+        :param Dep dep:
+        :rtype: `OrderedDict`
         """
-        for dep in dep_list:
-            if dep.abspath not in already_walked:
-                already_walked.add(dep.abspath)
-                if len(dep.deps) != 0 and not all(d.abspath in already_walked for d in dep.deps):
-                    walk_deps(dep.deps)
-                deps_in_order.append(dep)
+        result = OrderedDict()
+        other_deps = dep.deps[:]
+        while other_deps:
+            next_dep = other_deps.pop()
+            if next_dep.abspath in result:
+                continue
+            result[next_dep.abspath] = next_dep
+            # Not `reversed` results in equally valid results.
+            # But `reversed` results in a more intuitive result IMO.
+            other_deps.extend(reversed(next_dep.deps))
+        return result
 
-    walk_deps(root_deps)
-    return deps_in_order
+    deps = []
+    already_counted_deps = set()
+    for root in root_deps:
+        if root.abspath in already_counted_deps:
+            continue
+        all_deps = get_all_deps(root)
+        # root's deps count.
+        deps_counts = [(root, len(all_deps))]
+        already_counted_deps.add(root.abspath)
+        # sub deps' deps count.
+        for sub_dep_key, sub_dep in all_deps.iteritems():
+            if sub_dep_key in already_counted_deps:
+                continue
+            # Any of `append(...)` and `insert(0, ...)` result in equally valid results.
+            # But `insert(0, ...)` results in a more intuitive result IMO.
+            deps_counts.insert(0, (sub_dep, len(get_all_deps(sub_dep))))
+            already_counted_deps.add(sub_dep_key)
+        # use dep count as key and rely on stable sort.
+        deps.extend(sorted(deps_counts, key=lambda v: v[1]))
+    return [dep_element for dep_element, dep_count in deps]
 
 
 def format_command(command, dep):
@@ -444,24 +463,12 @@ def execute_command_in_dependencies(
     return exit_codes
 
 
-def get_list_from_argument(value):
-    """
-    :type value: unicode
-
-    :rtype: list(unicode)
-    :return: The list obtained from `value` (can be empty if `value` is empty).
-    """
-    import re
-    item_pattern = '[^,{}]+'.format(os.pathsep)
-    return re.findall(item_pattern, value)
-
-
 @click.command(name=PROG_NAME)
 @click.argument('command', nargs=-1)
 @click.version_option(__version__)
 @click.option(
-    '--projects', '-p', default='.',
-    help="List of projects.")
+    '--project', '-p', default='.', type=click.Path(), multiple=True,
+    help="Project to find dependencies of (can be used multiple times).")
 @click.option(
     '--pretty-print', '-pp', is_flag=True,
     help='Pretty print dependencies in a tree.')
@@ -482,31 +489,31 @@ def get_list_from_argument(value):
     help='Continue processing commands even when one fail (if some command fail the return value'
          ' will be non zero).')
 @click.option(
-    '--ignore-projects', default='', envvar='DEPS_IGNORE_PROJECTS',
-    help='List of project\'s names to ignore when looking for dependencies and will not recurse'
+    '--ignore-project', '-i', type=click.Path(), multiple=True, envvar='DEPS_IGNORE_PROJECT',
+    help='Project name to ignore when looking for dependencies and will not recurse'
          ' into those projects. Instead of passing this option an environment variable with the'
-         ' name DEPS_IGNORE_PROJECTS can be used.')
+         ' name DEPS_IGNORE_PROJECT can be used (can be used multiple times).')
 @click.option(
     '--force-color/--no-force-color', is_flag=True, envvar='DEPS_FORCE_COLOR',
     help='Always use colors on output (by default it is detected if running on a terminal). If file'
          ' redirection is used ANSI escape sequences are output even on windows. Instead of passing'
          ' this option an environment variable with the name DEPS_FORCE_COLOR can be used.')
 @click.option(
-    '--list-repositories', is_flag=True,
+    '--repos', is_flag=True,
     help='Instead of projects the enumeration procedure will use the containing repositories'
          ' instead of projects them selves')
 def cli(
     command,
-    projects,
+    project,
     pretty_print,
     require_file,
     here,
     dry_run,
     verbose,
     continue_on_failure,
-    ignore_projects,
+    ignore_project,
     force_color,
-    list_repositories,
+    repos,
 ):
     """
     Program to list dependencies of a project, or to execute a command for
@@ -516,7 +523,7 @@ def cli(
     it will use the current, or will find the first ancestor directory
     containing an `environment.yml` file):
 
-          deps -p mylib10,myotherlib20
+          deps -p mylib10 -p myotherlib20
 
       This may be used in combination with shell commands (useful for
       `source`ing files), e.g., to iterate on dependencies in windows (cmd):
@@ -546,15 +553,13 @@ def cli(
 
           deps --require-file Makefile -- make clean
 
-    List options should be passed as a list separated by "," or the system path separator (without
-    spaces, if spaces are required the value must be properly escaped as if must be a single
-    argument):
+    When passing parameters that can be used multiple times through environment variable use the
+    operational system path separator (windows=";", linux=":") to separate multiple entries:
 
-      \b
-        deps -p my_project,cool_project
-        deps -p "c:\project;c:\other project" (on windows)
-        deps -p '~/project:~/other project' (on linux)
+          set DEPS_IGNORE_PROJECT=old_project;fuzzy_project (windows)
+          export DEPS_IGNORE_PROJECT=old_project:fuzzy_project (linux)
 
+      This is equivalent to pass "--ignore-project=old_project --ignore-project=fuzzy_project"
     """
     global _click_echo_color
     original_auto_wrap_for_ansi = click.utils.auto_wrap_for_ansi
@@ -567,11 +572,10 @@ def cli(
                 # be output.
                 click.utils.auto_wrap_for_ansi = None
 
-        directories = find_directories(get_list_from_argument(projects))
-        ignore_projects = get_list_from_argument(ignore_projects)
+        directories = find_directories(project)
 
-        root_deps = obtain_all_dependecies_recursively(directories, ignore_projects)
-        if list_repositories:
+        root_deps = obtain_all_dependecies_recursively(directories, ignore_project)
+        if repos:
             root_deps = obtain_repos(root_deps)
 
         if pretty_print:
