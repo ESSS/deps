@@ -572,7 +572,12 @@ def cli(
           deps --require-file Makefile -- make clean
 
     When passing parameters that can be used multiple times through environment variable use the
-    operational system path separator (windows=";", linux=":").
+    operational system path separator (windows=";", linux=":") to separate multiple entries:
+
+          set DEPS_IGNORE_PROJECT=old_project;fuzzy_project (windows)
+          export DEPS_IGNORE_PROJECT=old_project:fuzzy_project (linux)
+
+      This is equivalent to pass "--ignore-project=old_project --ignore-project=fuzzy_project"
     """
     global _click_echo_color
     original_auto_wrap_for_ansi = click.utils.auto_wrap_for_ansi
