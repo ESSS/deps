@@ -128,7 +128,7 @@ def pretty_print_dependency_tree(root_deps):
     legend = textwrap.dedent('''\
         # - project_name: listed or target of command execution;
         # - (project_name): have already been printed in the tree;
-        # - <project_name>: have been ignored (see `--ignored-projects` option);
+        # - <project_name>: have been ignored (see `--ignore-project` option);
     ''')
     print(legend)
 
@@ -507,7 +507,7 @@ def execute_command_in_dependencies(
     help='Continue processing commands even when one fail (if some command fail the return value'
          ' will be non zero).')
 @click.option(
-    '--ignore-project', type=click.Path(), multiple=True, envvar='DEPS_IGNORE_PROJECT',
+    '--ignore-project', '-i', type=click.Path(), multiple=True, envvar='DEPS_IGNORE_PROJECT',
     help='Project name to ignore when looking for dependencies and will not recurse'
          ' into those projects. Instead of passing this option an environment variable with the'
          ' name DEPS_IGNORE_PROJECT can be used (can be used multiple times).')
