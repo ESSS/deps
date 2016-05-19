@@ -538,8 +538,9 @@ def test_list_repos(cli_runner, project_tree, piped_shell_execute):
     matcher.fnmatch_lines([
         '*[\\/]test_projects0[\\/]root_c',
         '    *[\\/]test_projects0[\\/]cs1',
-        '        *[\\/]test_projects0[\\/]cs2',
         '        (*[\\/]test_projects0[\\/]cs1)',
+        '        *[\\/]test_projects0[\\/]cs2',
+        '            (*[\\/]test_projects0[\\/]cs1)',
     ])
 
 
@@ -552,15 +553,26 @@ def test_list_repos_with_ignored_project(cli_runner, project_tree, piped_shell_e
     root = unicode(project_tree.join('root_c'))
     base_args = ['-p', root, '--repos']
 
-    base_args = ['-p', root, '--repos', '--ignore-project=dep_c1.3']
     # Test pretty print.
-    command_args = base_args + ['-pp']
+    command_args = base_args + ['--ignore-project=dep_c1.3', '-pp']
     result = cli_runner.invoke(deps_cli.cli, command_args)
     assert result.exit_code == 0, result.output
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
         '*[\\/]test_projects0[\\/]root_c',
         '    *[\\/]test_projects0[\\/]cs1',
-        '        <*[\\/]test_projects0[\\/]cs1>',
+        '        (*[\\/]test_projects0[\\/]cs1)',
+    ])
+
+    # Test pretty print.
+    command_args = base_args + ['--ignore-project=dep_c2.1', '-pp']
+    result = cli_runner.invoke(deps_cli.cli, command_args)
+    assert result.exit_code == 0, result.output
+    matcher = LineMatcher(result.output.splitlines())
+    matcher.fnmatch_lines([
+        '*[\\/]test_projects0[\\/]root_c',
+        '    *[\\/]test_projects0[\\/]cs1',
+        '        (*[\\/]test_projects0[\\/]cs1)',
+        '        <*[\\/]test_projects0[\\/]cs2>',
     ])
 

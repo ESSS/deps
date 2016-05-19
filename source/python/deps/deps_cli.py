@@ -271,29 +271,31 @@ def obtain_repos(dep_list):
 
     visited_deps = []
 
-    def convert_deps_to_repos(deps, list_of_repos):
+    def convert_deps_to_repos(deps, list_of_repos, parent):
         """
         :param list(Dep) deps:
         :param list(Dep) list_of_repos: This list will contain the converted repos (is changed).
+        :param unicode|None parent: The parent's name of the given deps (used to break infinite
+            recursion due cyclic dependencies without loosing declared dependencies).
         """
         for dep in deps:
-            if dep in visited_deps:
+            if (parent, dep) in visited_deps:
                 continue
-            visited_deps.append(dep)
+            visited_deps.append((parent, dep))
             repo = obtain_repo_from_dep(dep)
-            convert_deps_to_repos(dep.deps, repo.deps)
+            convert_deps_to_repos(dep.deps, repo.deps, dep.name)
             if repo not in list_of_repos:
                 list_of_repos.append(repo)
         # Avoid to list a repo as ignored and not ignored in the same list.
         for repo_dep in list_of_repos[:]:
             if repo_dep.ignored and [
-                e for e in repo.deps
+                e for e in list_of_repos
                 if repo_dep.name == e.name and not e.ignored
             ]:
-                list_of_repos.remove(repo)
+                list_of_repos.remove(repo_dep)
 
     root_repos = []
-    convert_deps_to_repos(dep_list, root_repos)
+    convert_deps_to_repos(dep_list, root_repos, None)
     return root_repos
 
 
