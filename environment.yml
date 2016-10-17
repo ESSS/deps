@@ -7,6 +7,7 @@ dependencies:
   - pytest-mock
   - jinja2
   - pyyaml
+  - future
 
 environment:
   - PYTHONPATH:

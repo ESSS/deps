@@ -1,12 +1,14 @@
 from __future__ import unicode_literals
-from builtins import str
-from _pytest.pytester import LineMatcher
-from deps import deps_cli
+
 import os
-import pytest
 import stat
 import sys
 import textwrap
+from builtins import str
+
+import pytest
+from _pytest.pytester import LineMatcher
+from deps import deps_cli
 
 
 @pytest.fixture(scope='session')
@@ -266,7 +268,7 @@ def test_script_execution(cli_runner, project_tree, piped_shell_execute):
     root_b = str(project_tree.join('root_b'))
     task_script = os.path.join('tasks', 'asd')
     command_args = ['-p', root_b, '-v', '-f', 'tasks/asd', task_script, '{name}', '{abs}']
-    result = cli_runner.invoke(deps_cli.cli, command_args)
+    result = cli_runner.invoke(deps_cli.cli, command_args, catch_exceptions=False)
     assert result.exit_code == 0, result.output
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
@@ -335,7 +337,7 @@ def test_force_color(
     """
     def configure_force_color():
         if use_env_var:
-            extra_env[b'DEPS_FORCE_COLOR'] = b'1' if force else b'0'
+            extra_env[str('DEPS_FORCE_COLOR')] = str('1') if force else str('0')
         else:
             command_args.insert(0, '--force-color' if force else '--no-force-color')
 
@@ -346,7 +348,7 @@ def test_force_color(
     configure_force_color()
 
     # Since `CliRunner.invoke` captures the output the stdout/stderr is not a tty.
-    result = cli_runner.invoke(deps_cli.cli, command_args, env=extra_env, color=None)
+    result = cli_runner.invoke(deps_cli.cli, command_args, env=extra_env, color=None, catch_exceptions=False)
     assert result.exit_code == 0, result.output
     output_repr = repr(result.output)
     # CSI for Control Sequence Introducer (or Control Sequence Initiator).
@@ -372,7 +374,7 @@ def test_ignore_projects(
     """
     def configure_ignored_projects():
         if use_env_var:
-            extra_env[b'DEPS_IGNORE_PROJECT'] = b'dep_a.1%sdep_z' % (os.pathsep,)
+            extra_env[str('DEPS_IGNORE_PROJECT')] = str('dep_a.1%sdep_z' % (os.pathsep,))
         else:
             command_args.insert(0, '--ignore-project=dep_a.1')
             command_args.insert(1, '--ignore-project=dep_z')
@@ -454,7 +456,7 @@ def test_require_file(cli_runner, project_tree, piped_shell_execute):
     )
 
 
-def test_continue_on_failue(cli_runner, project_tree, piped_shell_execute):
+def test_continue_on_failure(cli_runner, project_tree, piped_shell_execute):
     """
     :type cli_runner: click.testing.CliRunner
     :type project_tree: py.path.local
@@ -576,4 +578,3 @@ def test_list_repos_with_ignored_project(cli_runner, project_tree, piped_shell_e
         '        (*[\\/]test_projects0[\\/]cs1)',
         '        <*[\\/]test_projects0[\\/]cs2>',
     ])
-
