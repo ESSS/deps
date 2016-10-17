@@ -1,4 +1,5 @@
 from __future__ import unicode_literals
+from builtins import str
 from _pytest.pytester import LineMatcher
 from deps import deps_cli
 import os
@@ -31,7 +32,7 @@ def project_tree(tmpdir_factory):
         'cs1/dep_c1.3': ['dep_c1.1', '../cs2/dep_c2.1'],
         'cs2/dep_c2.1': ['../cs1/dep_c1.2'],
     }
-    for proj, deps in projects.iteritems():
+    for proj, deps in projects.items():
         proj_path = proj.split('/')
         proj_dir = test_projects.ensure(*proj_path, dir=True)
         test_projects.ensure(proj_path[0], '.git', dir=True)  # Fake git repo.
@@ -73,7 +74,7 @@ def project_tree(tmpdir_factory):
 
         script_file = tasks_dir.join('asd')
         script_file.write(bash_script)
-        script_file = unicode(script_file)
+        script_file = str(script_file)
         st = os.stat(script_file)
         os.chmod(script_file, st.st_mode | stat.S_IEXEC)
 
@@ -145,7 +146,7 @@ def test_cant_find_root(cli_runner, project_tree, piped_shell_execute):
     :type project_tree: py.path.local
     :type piped_shell_execute: mocker.patch
     """
-    proj_dir = unicode(project_tree.join('not_a_project'))
+    proj_dir = str(project_tree.join('not_a_project'))
     command_args = ['-p', proj_dir, 'echo', 'Hi', '{name}!']
     result = cli_runner.invoke(deps_cli.cli, command_args)
     assert result.exception is None or isinstance(result.exception, SystemExit)
@@ -155,7 +156,7 @@ def test_cant_find_root(cli_runner, project_tree, piped_shell_execute):
         'deps: error: could not find "environment.yml" for "*[\\/]test_projects0[\\/]not_a_project".',
     ])
 
-    proj_dir = unicode(project_tree.join('not_a_valid_folder'))
+    proj_dir = str(project_tree.join('not_a_valid_folder'))
     command_args = ['-p', proj_dir, 'echo', 'Hi', '{name}!']
     result = cli_runner.invoke(deps_cli.cli, command_args)
     assert result.exception is None or isinstance(result.exception, SystemExit)
@@ -237,7 +238,7 @@ def test_multiple_projects(cli_runner, project_tree):
     :type project_tree: py.path.local
     """
     projects = ['root_a', 'root_b']
-    projects = [unicode(project_tree.join(name)) for name in projects]
+    projects = [str(project_tree.join(name)) for name in projects]
     command_args = [('--project=%s' % (project,)) for project in projects]
     result = cli_runner.invoke(deps_cli.cli, command_args)
     assert result.exit_code == 0, result.output
@@ -262,7 +263,7 @@ def test_script_execution(cli_runner, project_tree, piped_shell_execute):
     :type project_tree: py.path.local
     :type piped_shell_execute: mocker.patch
     """
-    root_b = unicode(project_tree.join('root_b'))
+    root_b = str(project_tree.join('root_b'))
     task_script = os.path.join('tasks', 'asd')
     command_args = ['-p', root_b, '-v', '-f', 'tasks/asd', task_script, '{name}', '{abs}']
     result = cli_runner.invoke(deps_cli.cli, command_args)
@@ -295,7 +296,7 @@ def test_script_return_code(cli_runner, project_tree, piped_shell_execute):
     :type project_tree: py.path.local
     :type piped_shell_execute: mocker.patch
     """
-    root_b = unicode(project_tree.join('root_b'))
+    root_b = str(project_tree.join('root_b'))
     task_script = os.path.join('tasks', 'does-not-exist')
     command_args = ['-p', root_b, '-v', task_script, '{name}', '{abs}']
     result = cli_runner.invoke(deps_cli.cli, command_args)
@@ -338,7 +339,7 @@ def test_force_color(
         else:
             command_args.insert(0, '--force-color' if force else '--no-force-color')
 
-    root_b = unicode(project_tree.join('root_b'))
+    root_b = str(project_tree.join('root_b'))
     # Prepare the invocation.
     command_args = ['-v', '-p', root_b, 'echo', 'test', '{name}']
     extra_env = {}
@@ -375,7 +376,7 @@ def test_ignore_projects(
         else:
             command_args.insert(0, '--ignore-project=dep_a.1')
             command_args.insert(1, '--ignore-project=dep_z')
-    root_a = unicode(project_tree.join('root_a'))
+    root_a = str(project_tree.join('root_a'))
     # Prepare the invocation.
     command_args = ['-p', root_a, 'echo', 'test', '{name}']
     extra_env = {}
@@ -417,7 +418,7 @@ def test_require_file(cli_runner, project_tree, piped_shell_execute):
     :type project_tree: py.path.local
     :type piped_shell_execute: mocker.patch
     """
-    root_b = unicode(project_tree.join('root_b'))
+    root_b = str(project_tree.join('root_b'))
     base_args = ['-p', root_b, '--require-file', 'tasks/asd']
 
     command_args = base_args + ['-v', 'echo', 'This', 'is', '{name}']
@@ -459,7 +460,7 @@ def test_continue_on_failue(cli_runner, project_tree, piped_shell_execute):
     :type project_tree: py.path.local
     :type piped_shell_execute: mocker.patch
     """
-    root_b = unicode(project_tree.join('root_b'))
+    root_b = str(project_tree.join('root_b'))
     base_args = ['--continue-on-failure', '-p', root_b]
 
     # All fail.
@@ -515,7 +516,7 @@ def test_list_repos(cli_runner, project_tree, piped_shell_execute):
     :type project_tree: py.path.local
     :type piped_shell_execute: mocker.patch
     """
-    root = unicode(project_tree.join('root_c'))
+    root = str(project_tree.join('root_c'))
     base_args = ['-p', root, '--repos']
 
     command_args = base_args
@@ -550,7 +551,7 @@ def test_list_repos_with_ignored_project(cli_runner, project_tree, piped_shell_e
     :type project_tree: py.path.local
     :type piped_shell_execute: mocker.patch
     """
-    root = unicode(project_tree.join('root_c'))
+    root = str(project_tree.join('root_c'))
     base_args = ['-p', root, '--repos']
 
     # Test pretty print.
