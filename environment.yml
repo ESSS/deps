@@ -1,3 +1,5 @@
+{% set PY2 = os.environ.get('CONDA_PY', '27') < '35' %}
+{% set PY3 = not PY2 %}
 name: deps
 
 dependencies:
@@ -7,6 +9,8 @@ dependencies:
   - pytest-mock
   - jinja2
   - pyyaml
+  - future
+  - python {{'<3' if PY2 else '>=3'}}
 
 environment:
   - PYTHONPATH:

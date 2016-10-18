@@ -363,7 +363,7 @@ def obtain_dependencies_ordered_for_execution(root_deps):
         deps_counts = [(root, len(all_deps))]
         already_counted_deps.add(root.abspath)
         # sub deps' deps count.
-        for sub_dep_key, sub_dep in all_deps.iteritems():
+        for sub_dep_key, sub_dep in all_deps.items():
             if sub_dep_key in already_counted_deps:
                 continue
             # Any of `append(...)` and `insert(0, ...)` result in equally valid results.
@@ -396,7 +396,7 @@ def format_command(command, dep):
 
         :rtype: unicode
         """
-        for key, item in format_dict.iteritems():
+        for key, item in format_dict.items():
             s = s.replace('{' + key + '}', item)
         return s
 
