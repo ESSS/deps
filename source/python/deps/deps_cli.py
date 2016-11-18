@@ -1,15 +1,18 @@
 #!/usr/bin/env python
 from __future__ import print_function, unicode_literals
-from .version import __version__
-from collections import namedtuple
-from contextlib import contextmanager
-import click
+
+import functools
 import io
 import os
 import subprocess
 import sys
 import textwrap
+from collections import namedtuple
+from contextlib import contextmanager
 
+import click
+
+from .version import __version__
 
 click.disable_unicode_literals_warning = True
 
@@ -68,7 +71,22 @@ def cd(newdir):
 
 FILE_WITH_DEPENDENCIES = 'environment.yml'
 
+def memoize(fun):
 
+    cache = {}
+
+    @functools.wraps(fun)
+    def wrapper(*args, **kwargs):
+        key = (args, frozenset(kwargs.items()))
+        try:
+            return cache[key]
+        except KeyError:
+            ret = cache[key] = fun(*args, **kwargs)
+            return ret
+
+    return wrapper
+
+@memoize
 def get_shallow_dependencies_directories(base_directory):
     """
     :type base_directory: unicode
@@ -675,4 +693,3 @@ def main_func():
 
 if __name__ == '__main__':
     sys.exit(main_func())
-
