@@ -114,14 +114,17 @@ def get_shallow_dependencies_directories(base_directory):
 # ==================================================================================================
 # Common code
 # ==================================================================================================
-Dep = namedtuple('Dep', 'name,abspath,deps,ignored')
+Dep = namedtuple('Dep', 'name,abspath,deps,ignored,skipped')
 
 
-def create_new_dep_from_directory(directory, ignore_projects):
+def create_new_dep_from_directory(directory, ignore_projects, skipped_projects):
     """
     :param unicode directory: Root directory of a project.
-    :param list(unicode) ignore_projects: A list of project names to ignore (set the `ignored` attr
+    :param list[unicode] ignore_projects: A list of project names to ignore (set the `ignored` attr
     to `True`).
+    :param list[unicode] skipped_projects: A list of project names that should be skipped i.e. they
+    are part of dependencies but they aren't executed. Skipped has less priority than ignored, so
+    if a name is in both lists it will be always ignored.
     :rtype: Dep
     """
     directory = os.path.abspath(directory)
@@ -131,6 +134,7 @@ def create_new_dep_from_directory(directory, ignore_projects):
         abspath=directory,
         deps=[],
         ignored=name in ignore_projects,
+        skipped=name in skipped_projects,
     )
 
 
@@ -147,6 +151,7 @@ def pretty_print_dependency_tree(root_deps):
         # - project_name: listed or target of command execution;
         # - (project_name): have already been printed in the tree;
         # - <project_name>: have been ignored (see `--ignore-project` option);
+        # - {project_name}: have been skipped (see `--skipped-project` option);
     ''')
     print(legend)
 
@@ -161,7 +166,10 @@ def pretty_print_dependency_tree(root_deps):
                 print_formatted_dep(dep.name, indentation, '<{}>')
                 continue
             if dep.abspath not in already_printed:
-                print_formatted_dep(dep.name, indentation)
+                if dep.skipped:
+                    print_formatted_dep(dep.name, indentation, '{{{}}}')
+                else:
+                    print_formatted_dep(dep.name, indentation)
                 already_printed.add(dep.abspath)
                 print_deps(dep.deps, next_indentation_size, indentation_string)
             else:
@@ -222,14 +230,16 @@ def find_directories(raw_directories):
     return directories
 
 
-def obtain_all_dependecies_recursively(root_directories, ignored_projects):
+def obtain_all_dependecies_recursively(root_directories, ignored_projects, skipped_projects):
     """
     Creates a list with a `Dep` for each item in `root_directories` where each project is inspected
     recursively for its dependencies.
 
-    :param sequence(unicode) root_directories: The root directories identifying projects.
-    :param sequence(unicode) ignored_projects: Project names to be marked as ignored (and do not
-        recurse into it's dependencies.
+    :param sequence[unicode] root_directories: The root directories identifying projects.
+    :param sequence[unicode] ignored_projects: Project names to be marked as ignored (and do not
+        recurse into its dependencies).
+    :param sequence[unicode] skipped_projects: Project names to be marked as skipped (it still
+        recurse into its dependencies).
 
     :rtype: list(Dep)
     :return: The created list.
@@ -246,7 +256,7 @@ def obtain_all_dependecies_recursively(root_directories, ignored_projects):
         """
         for dep_directory in directories:
             if dep_directory not in all_deps:
-                dep = create_new_dep_from_directory(dep_directory, ignored_projects)
+                dep = create_new_dep_from_directory(dep_directory, ignored_projects, skipped_projects)
                 all_deps[dep_directory] = dep
                 if not dep.ignored:
                     current_dep_directories = get_shallow_dependencies_directories(
@@ -284,6 +294,7 @@ def obtain_repos(dep_list):
                 abspath=directory,
                 deps=[],
                 ignored=dep.ignored,
+                skipped=dep.skipped,
             )
         return all_repos[repo_key]
 
@@ -304,12 +315,26 @@ def obtain_repos(dep_list):
             convert_deps_to_repos(dep.deps, repo.deps, dep.name)
             if repo not in list_of_repos:
                 list_of_repos.append(repo)
-        # Avoid to list a repo as ignored and not ignored in the same list.
+
+        # Avoid to list a repo as ignored/skipped and not ignored/skipped in the same list. Note
+        # there is a precedence: if any project in repo is normal (i.e. not ignored/skipped), it
+        # will make repo normal; if any project is skipped, repo is skipped unless there is a
+        # normal project; repo only ignored if all projects are ignored.
+        precedence = {}
+        for i, repo_dep in enumerate(list_of_repos):
+            if repo_dep.name not in precedence:
+                precedence[repo_dep.name] = repo_dep
+
+            if not repo_dep.ignored and not repo_dep.skipped:
+                precedence[repo_dep.name] = repo_dep
+            elif repo_dep.skipped:
+                saved = precedence[repo_dep.name]
+                if saved.ignored:
+                    precedence[repo_dep.name] = repo_dep
+
+        precedence_values = list(precedence.values())
         for repo_dep in list_of_repos[:]:
-            if repo_dep.ignored and [
-                e for e in list_of_repos
-                if repo_dep.name == e.name and not e.ignored
-            ]:
+            if repo_dep not in precedence_values:
                 list_of_repos.remove(repo_dep)
 
     root_repos = []
@@ -464,6 +489,11 @@ def execute_command_in_dependencies(
             click.secho(' ignored', fg='yellow', color=_click_echo_color)
             continue
 
+        if dep.skipped:
+            click.secho(dep.name, fg='blue', bold=True, color=_click_echo_color, nl=False)
+            click.secho(' skipped', fg='magenta', color=_click_echo_color)
+            continue
+
         if not required_files_filter(dep, quiet=False):
             continue
 
@@ -532,6 +562,10 @@ def execute_command_in_dependencies(
          ' into those projects. Instead of passing this option an environment variable with the'
          ' name DEPS_IGNORE_PROJECT can be used (can be used multiple times).')
 @click.option(
+    '--skip-project', '-s', type=click.Path(), multiple=True, envvar='DEPS_SKIP_PROJECT',
+    help='Project name to skip execution but still look for its dependencies. Instead of passing this option an '
+         'environment variable with the name DEPS_SKIP_PROJECT can be used (can be used multiple times).')
+@click.option(
     '--force-color/--no-force-color', is_flag=True, envvar='DEPS_FORCE_COLOR',
     help='Always use colors on output (by default it is detected if running on a terminal). If file'
          ' redirection is used ANSI escape sequences are output even on windows. Instead of passing'
@@ -550,6 +584,7 @@ def cli(
     verbose,
     continue_on_failure,
     ignore_project,
+    skip_project,
     force_color,
     repos,
 ):
@@ -612,7 +647,7 @@ def cli(
 
         directories = find_directories(project)
 
-        root_deps = obtain_all_dependecies_recursively(directories, ignore_project)
+        root_deps = obtain_all_dependecies_recursively(directories, ignore_project, skip_project)
         if repos:
             root_deps = obtain_repos(root_deps)
 
@@ -643,7 +678,7 @@ def cli(
         if not command:
             deps_to_output = [
                 dep.name for dep in deps_in_order
-                if not dep.ignored and required_files_filter(dep, quiet=True)
+                if not dep.ignored and not dep.skipped and required_files_filter(dep, quiet=True)
             ]
             print('\n'.join(deps_to_output))
             return 0

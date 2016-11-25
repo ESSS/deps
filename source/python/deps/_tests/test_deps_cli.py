@@ -33,6 +33,10 @@ def project_tree(tmpdir_factory):
         'cs1/dep_c1.2': ['dep_c1.3', 'dep_c1.1'],
         'cs1/dep_c1.3': ['dep_c1.1', '../cs2/dep_c2.1'],
         'cs2/dep_c2.1': ['../cs1/dep_c1.2'],
+        'root_d': ['d/d1', 'd/d2', 'd/d3'],
+        'd/d1': [],
+        'd/d2': [],
+        'd/d3': [],
     }
     for proj, deps in projects.items():
         proj_path = proj.split('/')
@@ -414,6 +418,128 @@ def test_ignore_projects(
     )
 
 
+@pytest.mark.parametrize('use_env_var', [
+    True,
+    False,
+])
+def test_skip_projects(
+    use_env_var,
+    cli_runner,
+    project_tree,
+    piped_shell_execute,
+):
+    """
+    :type use_env_var: bool
+    :type cli_runner: click.testing.CliRunner
+    :type project_tree: py.path.local
+    :type piped_shell_execute: mocker.patch
+    """
+    def configure_skipped_projects():
+        if use_env_var:
+            extra_env[str('DEPS_SKIP_PROJECT')] = str('dep_a.1%sdep_z' % (os.pathsep,))
+        else:
+            command_args.insert(0, '--skip-project=dep_a.1')
+            command_args.insert(1, '--skip-project=dep_z')
+    root_a = str(project_tree.join('root_a'))
+    # Prepare the invocation.
+    command_args = ['-p', root_a, 'echo', 'test', '{name}']
+    extra_env = {}
+    configure_skipped_projects()
+
+    result = cli_runner.invoke(deps_cli.cli, command_args, env=extra_env)
+    assert result.exit_code == 0, result.output
+    matcher = LineMatcher(result.output.splitlines())
+    matcher.fnmatch_lines([
+        'dep_z skipped',
+        'dep_a.1.2',
+        'test dep_a.1.2',
+        'dep_a.1.1',
+        'test dep_a.1.1',
+        'dep_a.2',
+        'test dep_a.2',
+        'dep_a.1 skipped',
+        'root_a',
+        'test root_a',
+    ])
+
+    # Prepare the invocation.
+    command_args = ['-p', root_a]
+    extra_env = {}
+    configure_skipped_projects()
+
+    result = cli_runner.invoke(deps_cli.cli, command_args, env=extra_env)
+    assert result.exit_code == 0
+    assert result.output == textwrap.dedent(
+        '''\
+        dep_a.1.2
+        dep_a.1.1
+        dep_a.2
+        root_a
+        '''
+    )
+
+
+@pytest.mark.parametrize('use_env_var', [
+    True,
+    False,
+])
+def test_conflict_ignore_skip_projects(
+    use_env_var,
+    cli_runner,
+    project_tree,
+    piped_shell_execute,
+):
+    """
+    :type use_env_var: bool
+    :type cli_runner: click.testing.CliRunner
+    :type project_tree: py.path.local
+    :type piped_shell_execute: mocker.patch
+    """
+    def configure_skipped_projects():
+        if use_env_var:
+            extra_env[str('DEPS_SKIP_PROJECT')] = str('dep_a.1')
+            extra_env[str('DEPS_IGNORE_PROJECT')] = str('dep_a.1')
+        else:
+            command_args.insert(0, '--skip-project=dep_a.1')
+            command_args.insert(0, '--ignore-project=dep_a.1')
+    root_a = str(project_tree.join('root_a'))
+    # Prepare the invocation.
+    command_args = ['-p', root_a, 'echo', 'test', '{name}']
+    extra_env = {}
+    configure_skipped_projects()
+
+    result = cli_runner.invoke(deps_cli.cli, command_args, env=extra_env)
+    assert result.exit_code == 0, result.output
+    matcher = LineMatcher(result.output.splitlines())
+    matcher.fnmatch_lines([
+        'dep_a.1 ignored',
+
+        'dep_z',
+        'test dep_z',
+
+        'dep_a.2',
+        'test dep_a.2',
+
+        'root_a',
+        'test root_a',
+    ])
+
+    # Prepare the invocation.
+    command_args = ['-p', root_a]
+    extra_env = {}
+    configure_skipped_projects()
+
+    result = cli_runner.invoke(deps_cli.cli, command_args, env=extra_env)
+    assert result.exit_code == 0
+    assert result.output == textwrap.dedent(
+        '''\
+        dep_z
+        dep_a.2
+        root_a
+        '''
+    )
+
+
 def test_require_file(cli_runner, project_tree, piped_shell_execute):
     """
     :type cli_runner: click.testing.CliRunner
@@ -578,3 +704,101 @@ def test_list_repos_with_ignored_project(cli_runner, project_tree, piped_shell_e
         '        (*[\\/]test_projects0[\\/]cs1)',
         '        <*[\\/]test_projects0[\\/]cs2>',
     ])
+
+
+def test_list_repos_with_skipped_project(cli_runner, project_tree, piped_shell_execute):
+    """
+    :type cli_runner: click.testing.CliRunner
+    :type project_tree: py.path.local
+    :type piped_shell_execute: mocker.patch
+    """
+    root = str(project_tree.join('root_c'))
+    base_args = ['-p', root, '--repos']
+
+    # Test pretty print.
+    command_args = base_args + ['--skip-project=dep_c1.3', '-pp']
+    result = cli_runner.invoke(deps_cli.cli, command_args)
+    assert result.exit_code == 0, result.output
+    matcher = LineMatcher(result.output.splitlines())
+    matcher.fnmatch_lines([
+        '*[\\/]test_projects0[\\/]root_c',
+        '    *[\\/]test_projects0[\\/]cs1',
+        '        (*[\\/]test_projects0[\\/]cs1)',
+        '        *[\\/]test_projects0[\\/]cs2',
+        '            (*[\\/]test_projects0[\\/]cs1)',
+    ])
+
+    # Test pretty print.
+    command_args = base_args + ['--skip-project=dep_c2.1', '-pp']
+    result = cli_runner.invoke(deps_cli.cli, command_args)
+    assert result.exit_code == 0, result.output
+    matcher = LineMatcher(result.output.splitlines())
+    matcher.fnmatch_lines([
+        '*[\\/]test_projects0[\\/]root_c',
+        '    *[\\/]test_projects0[\\/]cs1',
+        '        (*[\\/]test_projects0[\\/]cs1)',
+        '        {*[\\/]test_projects0[\\/]cs2}',
+        '            (*[\\/]test_projects0[\\/]cs1)',
+    ])
+
+
+def test_list_repos_conflict_skipped_ignored_project(cli_runner, project_tree, piped_shell_execute):
+    """
+    :type cli_runner: click.testing.CliRunner
+    :type project_tree: py.path.local
+    :type piped_shell_execute: mocker.patch
+    """
+    root = str(project_tree.join('root_c'))
+    base_args = ['-p', root, '--repos']
+
+    # Test pretty print.
+    command_args = base_args + ['--skip-project=dep_c1.3', '--ignore-project=dep_c1.3', '-pp']
+    result = cli_runner.invoke(deps_cli.cli, command_args)
+    assert result.exit_code == 0, result.output
+    matcher = LineMatcher(result.output.splitlines())
+    matcher.fnmatch_lines([
+        '*[\\/]test_projects0[\\/]root_c',
+        '    *[\\/]test_projects0[\\/]cs1',
+        '        (*[\\/]test_projects0[\\/]cs1)',
+    ])
+
+    # Test pretty print.
+    command_args = base_args + ['--skip-project=dep_c2.1', '--ignore-project=dep_c2.1', '-pp']
+    result = cli_runner.invoke(deps_cli.cli, command_args)
+    assert result.exit_code == 0, result.output
+    matcher = LineMatcher(result.output.splitlines())
+    matcher.fnmatch_lines([
+        '*[\\/]test_projects0[\\/]root_c',
+        '    *[\\/]test_projects0[\\/]cs1',
+        '        (*[\\/]test_projects0[\\/]cs1)',
+        '        <*[\\/]test_projects0[\\/]cs2>',
+    ])
+
+
+@pytest.mark.parametrize('mode', ['normal', 'skipped'])
+def test_list_repos_precedence(mode, cli_runner, project_tree, piped_shell_execute):
+    """
+    :type cli_runner: click.testing.CliRunner
+    :type project_tree: py.path.local
+    :type piped_shell_execute: mocker.patch
+    """
+    root = str(project_tree.join('root_d'))
+    base_args = ['-p', root, '--repos']
+
+    command_args = base_args + ['-pp', '--ignore-project=d1', '--ignore-project=d2']
+    if mode == 'skipped':
+        command_args.append('--skip-project=d3')
+    result = cli_runner.invoke(deps_cli.cli, command_args)
+    assert result.exit_code == 0, result.output
+    matcher = LineMatcher(result.output.splitlines())
+    if mode == 'skipped':
+        matcher.fnmatch_lines([
+            '*[\\/]test_projects0[\\/]root_d',
+            '    {*[\\/]test_projects0[\\/]d}',
+        ])
+    else:
+        assert mode == 'normal'
+        matcher.fnmatch_lines([
+            '*[\\/]test_projects0[\\/]root_d',
+            '    *[\\/]test_projects0[\\/]d',
+        ])
