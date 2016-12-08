@@ -632,8 +632,8 @@ def execute_command_in_dependencies(
             keep_on_going = True
             for returncode in exit_codes:
                 if returncode != 0:
-                        keep_on_going = False
-                        break
+                    keep_on_going = False
+                    break
 
             if not keep_on_going:
                 break
@@ -734,7 +734,7 @@ def execute(formatted_command, working_dir, buffer_output=False):
         'jobs > 1 to run more jobs concurrently).')
 @click.option(
     '--deps-reversed', is_flag=True,
-    help='Will run with a reversed depondency (only used if --jobs=1). Useful to identify where the'
+    help='Will run with a reversed dependency (only used if --jobs=1). Useful to identify where the'
         'order is important.')
 def cli(
     command,
