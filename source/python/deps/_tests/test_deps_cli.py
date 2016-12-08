@@ -1,14 +1,14 @@
 from __future__ import unicode_literals
 
+from deps import deps_cli
 import os
 import stat
 import sys
 import textwrap
-from builtins import str
 
-import pytest
 from _pytest.pytester import LineMatcher
-from deps import deps_cli
+from builtins import str
+import pytest
 
 
 @pytest.fixture(scope='session')
@@ -115,7 +115,7 @@ def test_no_args(cli_runner, project_tree, monkeypatch):
     """
     monkeypatch.chdir(project_tree.join('root_b'))
     result = cli_runner.invoke(deps_cli.cli)
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 0
     assert result.output == textwrap.dedent(
         '''\
         dep_z
@@ -134,7 +134,7 @@ def test_no_args_cyclic_deps(cli_runner, project_tree, monkeypatch):
     """
     monkeypatch.chdir(project_tree.join('root_c'))
     result = cli_runner.invoke(deps_cli.cli)
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 0
     assert result.output == textwrap.dedent(
         '''\
         dep_c2.1
@@ -247,7 +247,7 @@ def test_multiple_projects(cli_runner, project_tree):
     projects = [str(project_tree.join(name)) for name in projects]
     command_args = [('--project=%s' % (project,)) for project in projects]
     result = cli_runner.invoke(deps_cli.cli, command_args)
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 0
     assert result.output == textwrap.dedent(
         '''\
         dep_z
@@ -273,7 +273,7 @@ def test_script_execution(cli_runner, project_tree, piped_shell_execute):
     task_script = os.path.join('tasks', 'asd')
     command_args = ['-p', root_b, '-v', '-f', 'tasks/asd', task_script, '{name}', '{abs}']
     result = cli_runner.invoke(deps_cli.cli, command_args, catch_exceptions=False)
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 0
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
         'dep_z',
@@ -353,7 +353,7 @@ def test_force_color(
 
     # Since `CliRunner.invoke` captures the output the stdout/stderr is not a tty.
     result = cli_runner.invoke(deps_cli.cli, command_args, env=extra_env, color=None, catch_exceptions=False)
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 0
     output_repr = repr(result.output)
     # CSI for Control Sequence Introducer (or Control Sequence Initiator).
     ansi_csi_repr = '\\x1b['
@@ -389,7 +389,7 @@ def test_ignore_projects(
     configure_ignored_projects()
 
     result = cli_runner.invoke(deps_cli.cli, command_args, env=extra_env)
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 0
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
         'dep_a.1 ignored',
@@ -447,7 +447,7 @@ def test_skip_projects(
     configure_skipped_projects()
 
     result = cli_runner.invoke(deps_cli.cli, command_args, env=extra_env)
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 0
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
         'dep_z skipped',
@@ -509,7 +509,7 @@ def test_conflict_ignore_skip_projects(
     configure_skipped_projects()
 
     result = cli_runner.invoke(deps_cli.cli, command_args, env=extra_env)
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 0
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
         'dep_a.1 ignored',
@@ -551,7 +551,7 @@ def test_require_file(cli_runner, project_tree, piped_shell_execute):
 
     command_args = base_args + ['-v', 'echo', 'This', 'is', '{name}']
     result = cli_runner.invoke(deps_cli.cli, command_args)
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 0
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
         'dep_z',
@@ -573,7 +573,7 @@ def test_require_file(cli_runner, project_tree, piped_shell_execute):
 
     command_args = ['-p', root_b, '--require-file', 'tasks/asd']
     result = cli_runner.invoke(deps_cli.cli, command_args)
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 0
     assert result.output == textwrap.dedent(
         '''\
         dep_z
@@ -634,7 +634,7 @@ def test_continue_on_failure(cli_runner, project_tree, piped_shell_execute):
     # None fail.
     command_args = base_args + ['echo', 'This', 'is', '{name}']
     result = cli_runner.invoke(deps_cli.cli, command_args)
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 0
     assert 'deps: error: Command failed' not in result.output
 
 
@@ -649,7 +649,7 @@ def test_list_repos(cli_runner, project_tree, piped_shell_execute):
 
     command_args = base_args
     result = cli_runner.invoke(deps_cli.cli, command_args)
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 0
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
         '*[\\/]test_projects0[\\/]cs2',
@@ -662,7 +662,7 @@ def test_list_repos(cli_runner, project_tree, piped_shell_execute):
     # Test pretty print.
     command_args = base_args + ['-pp']
     result = cli_runner.invoke(deps_cli.cli, command_args)
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 0
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
         '*[\\/]test_projects0[\\/]root_c',
@@ -685,7 +685,7 @@ def test_list_repos_with_ignored_project(cli_runner, project_tree, piped_shell_e
     # Test pretty print.
     command_args = base_args + ['--ignore-project=dep_c1.3', '-pp']
     result = cli_runner.invoke(deps_cli.cli, command_args)
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 0
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
         '*[\\/]test_projects0[\\/]root_c',
@@ -696,7 +696,7 @@ def test_list_repos_with_ignored_project(cli_runner, project_tree, piped_shell_e
     # Test pretty print.
     command_args = base_args + ['--ignore-project=dep_c2.1', '-pp']
     result = cli_runner.invoke(deps_cli.cli, command_args)
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 0
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
         '*[\\/]test_projects0[\\/]root_c',
@@ -718,7 +718,7 @@ def test_list_repos_with_skipped_project(cli_runner, project_tree, piped_shell_e
     # Test pretty print.
     command_args = base_args + ['--skip-project=dep_c1.3', '-pp']
     result = cli_runner.invoke(deps_cli.cli, command_args)
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 0
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
         '*[\\/]test_projects0[\\/]root_c',
@@ -731,7 +731,7 @@ def test_list_repos_with_skipped_project(cli_runner, project_tree, piped_shell_e
     # Test pretty print.
     command_args = base_args + ['--skip-project=dep_c2.1', '-pp']
     result = cli_runner.invoke(deps_cli.cli, command_args)
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 0
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
         '*[\\/]test_projects0[\\/]root_c',
@@ -754,7 +754,7 @@ def test_list_repos_conflict_skipped_ignored_project(cli_runner, project_tree, p
     # Test pretty print.
     command_args = base_args + ['--skip-project=dep_c1.3', '--ignore-project=dep_c1.3', '-pp']
     result = cli_runner.invoke(deps_cli.cli, command_args)
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 0
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
         '*[\\/]test_projects0[\\/]root_c',
@@ -765,7 +765,7 @@ def test_list_repos_conflict_skipped_ignored_project(cli_runner, project_tree, p
     # Test pretty print.
     command_args = base_args + ['--skip-project=dep_c2.1', '--ignore-project=dep_c2.1', '-pp']
     result = cli_runner.invoke(deps_cli.cli, command_args)
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 0
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
         '*[\\/]test_projects0[\\/]root_c',
@@ -789,7 +789,7 @@ def test_list_repos_precedence(mode, cli_runner, project_tree, piped_shell_execu
     if mode == 'skipped':
         command_args.append('--skip-project=d3')
     result = cli_runner.invoke(deps_cli.cli, command_args)
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 0
     matcher = LineMatcher(result.output.splitlines())
     if mode == 'skipped':
         matcher.fnmatch_lines([
@@ -802,3 +802,105 @@ def test_list_repos_precedence(mode, cli_runner, project_tree, piped_shell_execu
             '*[\\/]test_projects0[\\/]root_d',
             '    *[\\/]test_projects0[\\/]d',
         ])
+
+
+def test_deps_parallel_unordered(cli_runner, project_tree, monkeypatch):
+    """
+    :type cli_runner: click.testing.CliRunner
+    :type project_tree: py.path.local
+    :type piped_shell_execute: mocker.patch
+    """
+    monkeypatch.chdir(project_tree.join('root_b'))
+    command_args = ['--jobs=2', '--jobs-unordered', '--', 'python', '-c', '"name: {name}"']
+
+    result = cli_runner.invoke(deps_cli.cli, command_args)
+    assert result.exit_code == 0
+    matcher = LineMatcher(result.output.splitlines())
+    matcher.fnmatch_lines_random([
+        '=======================================================================================================================',
+        'dep_z, dep_b.1.1, dep_b.1, root_b',
+        'Finished: dep_z in *',
+        'Finished: dep_b.1.1 in *',
+        'Finished: root_b in *',
+        'Finished: dep_b.1 in *',
+    ])
+
+def test_deps_parallel_unordered_error(cli_runner, project_tree, monkeypatch, piped_shell_execute):
+    """
+    :type cli_runner: click.testing.CliRunner
+    :type project_tree: py.path.local
+    :type piped_shell_execute: mocker.patch
+    """
+    task_script = os.path.join('tasks', 'does-not-exist')
+
+    monkeypatch.chdir(project_tree.join('root_b'))
+    command_args = ['-v', '--jobs=2', '--jobs-unordered', task_script]
+
+    result = cli_runner.invoke(deps_cli.cli, command_args)
+    assert result.exit_code == 1
+    matcher = LineMatcher(result.output.splitlines())
+    matcher.fnmatch_lines_random([
+        'dep_z, dep_b.1.1, dep_b.1, root_b',
+
+        # We know that this will fail (it'll be the first). Others may fail or may be cancelled, we
+        # can't guarantee.
+        'deps: error: Command failed (project: dep_z)',
+    ])
+
+
+def test_deps_parallel(cli_runner, project_tree, monkeypatch):
+    """
+    :type cli_runner: click.testing.CliRunner
+    :type project_tree: py.path.local
+    :type piped_shell_execute: mocker.patch
+    """
+    monkeypatch.chdir(project_tree.join('root_b'))
+    command_args = ['--jobs=2', '--', 'python', '-c', '"name: {name}"']
+
+    result = cli_runner.invoke(deps_cli.cli, command_args)
+    assert result.exit_code == 0
+    matcher = LineMatcher(result.output.splitlines())
+    matcher.fnmatch_lines_random([
+        '=======================================================================================================================',
+        'dep_z',
+        'Finished: dep_z in *',
+        '=======================================================================================================================',
+        'dep_b.1.1',
+        'Finished: dep_b.1.1 in *',
+        '=======================================================================================================================',
+        'dep_b.1',
+        'Finished: dep_b.1 in *',
+        '=======================================================================================================================',
+        'root_b',
+        'Finished: root_b in *',
+    ])
+
+def test_deps_parallel_2(cli_runner, project_tree, monkeypatch):
+    """
+    :type cli_runner: click.testing.CliRunner
+    :type project_tree: py.path.local
+    :type piped_shell_execute: mocker.patch
+    """
+    monkeypatch.chdir(project_tree.join('root_a'))
+    command_args = ['--jobs=2', '--', 'python', '-c', '"name: {name}"']
+
+    result = cli_runner.invoke(deps_cli.cli, command_args)
+    assert result.exit_code == 0
+    matcher = LineMatcher(result.output.splitlines())
+    matcher.fnmatch_lines_random([
+        '=======================================================================================================================',
+        'dep_z',
+        'Finished: dep_z in *',
+        '=======================================================================================================================',
+        'dep_a.2, dep_a.1.1, dep_a.1.2',
+        'Finished: dep_a.2 in *',
+        'Finished: dep_a.1.1 in *',
+        'Finished: dep_a.1.2 in *',
+        '=======================================================================================================================',
+        'dep_a.1',
+        'Finished: dep_a.1 in *',
+        '=======================================================================================================================',
+        'root_a',
+        'Finished: root_a in *',
+    ])
+
