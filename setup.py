@@ -1,9 +1,22 @@
+import sys
+
 from setuptools import setup, find_packages
 
 other_locals = {}
 with open('source/python/deps/version.py') as f:
     exec(f.read(), None, other_locals)
 version = other_locals['__version__']
+
+install_requires = [
+  'click',
+  'colorama',
+  'jinja2',
+  'pyyaml',
+]
+
+if sys.version_info[0] <= 2:
+    # Backport of concurrent.futures
+    install_requires.append('futures')
 
 setup(
     name='deps',
@@ -19,10 +32,5 @@ setup(
             'deps = deps.deps_cli:main_func',
         ],
     },
-    install_requires=[
-      'click',
-      'colorama',
-      'jinja2',
-      'pyyaml',
-    ],
+    install_requires=install_requires,
 )
