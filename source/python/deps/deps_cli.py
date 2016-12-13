@@ -1,18 +1,19 @@
 #!/usr/bin/env python
 from __future__ import print_function, unicode_literals
 
+from collections import OrderedDict
+from collections import namedtuple
 import functools
 import io
 import os
 import subprocess
 import sys
 import textwrap
-from collections import namedtuple
-from contextlib import contextmanager
 
 import click
 
 from .version import __version__
+
 
 click.disable_unicode_literals_warning = True
 
@@ -50,20 +51,6 @@ def echo_error(*args, **kwargs):
     kwargs.update(bold=True)
     kwargs.update(color=_click_echo_color)
     click.secho(*args, **kwargs)
-
-
-@contextmanager
-def cd(newdir):
-    if newdir is None:
-        yield
-    else:
-        prevdir = os.getcwd()
-        os.chdir(os.path.expanduser(newdir))
-        try:
-            yield
-        finally:
-            os.chdir(prevdir)
-
 
 # ==================================================================================================
 # Customizations
@@ -114,7 +101,21 @@ def get_shallow_dependencies_directories(base_directory):
 # ==================================================================================================
 # Common code
 # ==================================================================================================
-Dep = namedtuple('Dep', 'name,abspath,deps,ignored,skipped')
+_Dep = namedtuple('Dep', 'name,abspath,deps,ignored,skipped')
+
+class Dep(_Dep):
+
+    # Overridden to make identity compares (unlike namedtuple which would compare the contents). In
+    # practice, this is needed because the deps is a list, so, Dep couldn't be used as a dict key
+    # or in a set.
+    def __hash__(self):
+        return id(self)
+
+    def __eq__(self, o):
+        return o is self
+
+    def __ne__(self, o):
+        return not self == o
 
 
 def create_new_dep_from_directory(directory, ignore_projects, skipped_projects):
@@ -341,6 +342,29 @@ def obtain_repos(dep_list):
     convert_deps_to_repos(dep_list, root_repos, None)
     return root_repos
 
+@memoize
+def get_abs_path_to_dep_for_all_deps(dep):
+    """
+    List all dependencies (and sub dependencies) of the given dep.
+
+    :param Dep dep:
+    :return `OrderedDict`:
+        Returns the abs path of the dep pointing to the dep.
+
+    :note:
+        The return is memoized, so, it shouldn't be edited in any way.
+    """
+    result = OrderedDict()
+    other_deps = dep.deps[:]
+    while other_deps:
+        next_dep = other_deps.pop()
+        if next_dep.abspath in result:
+            continue
+        result[next_dep.abspath] = next_dep
+        # Not `reversed` results in equally valid results.
+        # But `reversed` results in a more intuitive result IMO.
+        other_deps.extend(reversed(next_dep.deps))
+    return result
 
 def obtain_dependencies_ordered_for_execution(root_deps):
     """
@@ -358,25 +382,6 @@ def obtain_dependencies_ordered_for_execution(root_deps):
     :rtype: list(Dep)
     :return: A list of all projects target to execution.
     """
-    from collections import OrderedDict
-
-    def get_all_deps(dep):
-        """
-        List all dependencies (and sub dependencies) of the given dep.
-        :param Dep dep:
-        :rtype: `OrderedDict`
-        """
-        result = OrderedDict()
-        other_deps = dep.deps[:]
-        while other_deps:
-            next_dep = other_deps.pop()
-            if next_dep.abspath in result:
-                continue
-            result[next_dep.abspath] = next_dep
-            # Not `reversed` results in equally valid results.
-            # But `reversed` results in a more intuitive result IMO.
-            other_deps.extend(reversed(next_dep.deps))
-        return result
 
     def count_deps(dep):
         """
@@ -401,7 +406,7 @@ def obtain_dependencies_ordered_for_execution(root_deps):
     for root in root_deps:
         if root.abspath in already_counted_deps:
             continue
-        all_deps = get_all_deps(root)
+        all_deps = get_abs_path_to_dep_for_all_deps(root)
         # root's deps count.
         deps_counts = [(root, len(all_deps))]
         already_counted_deps.add(root.abspath)
@@ -457,78 +462,221 @@ def execute_command_in_dependencies(
     verbose=False,
     continue_on_failure=False,
     here=False,
+    jobs=1,
+    jobs_unordered=False,
 ):
     """
     Execute the given command for the given dependencies.
 
     :param list(unicode) command: The commando to be executed.
+
     :param list(Dep) dependencies: The list of dependencies for which execute the command.
+
     :param callable required_files_filter: A list os files required in a dependency root directory
         to execute the command.
+
     :param bool dry_run: Does all the checks and most output normally but does not actually execute
         the command.
+
     :param bool verbose: Prints extra information.
+
     :param bool continue_on_failure: When this is `False` the first command with a non zero return
         code makes the dependency processing to stop and this function returns, when it is `True`
         all dependencies are always processed.
+
     :param bool here: Does not change the working dir to the root of the dependency when executing
         the command.
+
+    :param int jobs: The number of concurrent jobs to be executed.
+
+    :param bool jobs_unordered: This only makes a difference if jobs > 1, in which case it'll be
+        able to run all jobs in parallel, without taking into account any pre-condition for the job
+        to run (otherwise, it'll run jobs considering that its pre-requisites are ran first).
 
     :rtype: list(int)
     :return: The exit code of the commands executed so far (may be smaller than `dependencies` list
         when `continue_on_failure` is false).
     """
     exit_codes = []
+    error_messages = []
+    initial = [x.name for x in dependencies]
+    buffer_output = False
 
-    for dep in dependencies:
-        click.secho('\n' + '=' * MAX_LINE_LENGTH, fg='black', bold=True, color=_click_echo_color)
+    if jobs > 1:
+        buffer_output = True
+        from concurrent.futures.thread import ThreadPoolExecutor
+        executor = ThreadPoolExecutor(max_workers=jobs)
+        previously_added_to_batch = set()
+        
+        def calculate_next_batch(dependencies):
+            next_batch = []
+            if jobs_unordered:
+                next_batch.extend(dependencies)
+                del dependencies[:]
+            else:
+                msg = []
+                for i, dep in reversed(list(enumerate(dependencies))):
+                    for depends_on in get_abs_path_to_dep_for_all_deps(dep).values():
+                        if depends_on not in previously_added_to_batch:
+                            msg.append('%s still depending on: %s' % (dep.name, depends_on.name))
+                            break
+                    else:
+                        next_batch.append(dependencies.pop(i))
 
-        # Checks before execution.
-        if dep.ignored:
-            click.secho(dep.name, fg='blue', bold=True, color=_click_echo_color, nl=False)
-            click.secho(' ignored', fg='yellow', color=_click_echo_color)
-            continue
+                if not next_batch and dependencies:
+                    raise AssertionError(
+                        'No batch calculated and dependencies still available.\n\n'
+                        'Remaining:\n%s\n\nFinished:\n%s\n\nAll:\n%s' % (
+                        '\n'.join(msg),
+                        '\n'.join(str(x.name) for x in previously_added_to_batch),
+                        '\n'.join(initial)
+                        ))
 
-        if dep.skipped:
-            click.secho(dep.name, fg='blue', bold=True, color=_click_echo_color, nl=False)
-            click.secho(' skipped', fg='magenta', color=_click_echo_color)
-            continue
+            previously_added_to_batch.update(next_batch)
+            return next_batch
+    else:
+        from ._synchronous_executor import SynchronousExecutor
+        executor = SynchronousExecutor()
+        def calculate_next_batch(dependencies):
+            # The next is the first one in the list.
+            return [dependencies.pop(0)]
+        
 
-        if not required_files_filter(dep, quiet=False):
-            continue
+    while len(dependencies) > 0:
+        deps = calculate_next_batch(dependencies)
+        dep_to_future = {}
+        first = True
+        print_str = ', '.join(dep.name for dep in deps)
+        for dep in deps:
+            if len(deps) == 1 or first:
+                click.secho('\n' + '=' * MAX_LINE_LENGTH, fg='black', bold=True, color=_click_echo_color)
 
-        formatted_command = format_command(command, dep)
+            # Checks before execution.
+            if dep.ignored:
+                click.secho(dep.name, fg='blue', bold=True, color=_click_echo_color, nl=False)
+                click.secho(' ignored', fg='yellow', color=_click_echo_color)
+                continue
 
-        working_dir = None
-        if not here:
-            working_dir = dep.abspath
+            if dep.skipped:
+                click.secho(dep.name, fg='blue', bold=True, color=_click_echo_color, nl=False)
+                click.secho(' skipped', fg='magenta', color=_click_echo_color)
+                continue
 
-        click.secho(dep.name, fg='blue', bold=True, color=_click_echo_color)
-        if verbose or dry_run:
-            command_to_print = ' '.join(
-                arg.replace(' ', '\\ ') for arg in formatted_command)
-            echo_verbose_msg('executing: ' + command_to_print)
-            if working_dir:
-                echo_verbose_msg('from:      ' + working_dir)
+            if not required_files_filter(dep, quiet=False):
+                continue
 
-        if not dry_run:
-            if not sys.platform.startswith('win'):
-                import pipes
-                for index, item in enumerate(formatted_command):
-                    formatted_command[index] = pipes.quote(item)
-                formatted_command = ' '.join(formatted_command)
+            formatted_command = format_command(command, dep)
 
-            with cd(working_dir):
-                process = shell_execute(formatted_command)
-            exit_codes.append(process.returncode)
+            working_dir = None
+            if not here:
+                working_dir = dep.abspath
+
+            if len(deps) == 1 or first:
+                click.secho(print_str, fg='blue', bold=True, color=_click_echo_color)
+            if verbose or dry_run:
+                command_to_print = ' '.join(
+                    arg.replace(' ', '\\ ') for arg in formatted_command)
+                echo_verbose_msg('executing: ' + command_to_print)
+                if working_dir:
+                    echo_verbose_msg('from:      ' + working_dir)
+
+            if not dry_run:
+                dep_to_future[dep] = executor.submit(
+                    execute, formatted_command, working_dir, buffer_output)
+
+            first = False
+
+        for dep, future in dep_to_future.items():
+            try:
+                returncode, stdout, stderr, command_time = future.result()
+            except Exception as e:
+                # Usually should only fail on CancelledException
+                returncode = 1
+                stdout = ''
+                stderr = str(e)
+                command_time = 0.0
+
+            exit_codes.append(returncode)
+
+            click.secho('Finished: %s in %.2fs' % (dep.name, command_time), fg='white', bold=False, color=_click_echo_color)
+            if buffer_output:
+                if stdout:
+                    click.secho('=== STDOUT ===')
+                    click.secho(stdout)
+
+                if stderr:
+                    click.secho('=== STDERR ===', fg='red', bold=True)
+                    click.secho(stderr, fg='red', bold=True)
+
 
             if verbose:
-                echo_verbose_msg('return code: {}'.format(process.returncode))
-            if process.returncode != 0:
+                if jobs > 1:
+                    echo_verbose_msg('return code for project {}: {}'.format(dep.name, returncode))
+                else:
+                    echo_verbose_msg('return code: {}'.format(returncode))
+
+            if returncode != 0:
+                error_messages.append('Command failed (project: %s)' % (dep.name,))
                 echo_error('Command failed')
+
                 if not continue_on_failure:
+                    # Cancel what can be cancelled in case we had a failure.
+                    for f in dep_to_future.values():
+                        f.cancel()
+
+
+        if not continue_on_failure:
+            keep_on_going = True
+            for returncode in exit_codes:
+                if returncode != 0:
+                    keep_on_going = False
                     break
+
+            if not keep_on_going:
+                break
+
+    # If we have errors and we kept on going or executed multiple jobs, print a summary of the
+    # errors at the end.
+    if continue_on_failure or jobs > 1:
+        for msg in error_messages:
+            echo_error(msg)
+
     return exit_codes
+
+
+def execute(formatted_command, working_dir, buffer_output=False):
+    '''
+    Actually executes some command in the given working directory.
+
+    :param list(unicode) formatted_command:
+        A list with the commands to be executed.
+
+    :param unicode working_dir:
+        The working directory for the command.
+
+    :param bool buffer_output:
+        Whether the output of the command should be buffered and returned or just printed
+        directly.
+
+    :return tuple(int, unicode, unicode, float):
+        A tuple with (returncode, stdout, stderr, time to execute command).
+    '''
+    if not sys.platform.startswith('win'):
+        import pipes
+        for index, item in enumerate(formatted_command):
+            formatted_command[index] = pipes.quote(item)
+        formatted_command = ' '.join(formatted_command)
+
+    if working_dir is None:
+        cwd = None
+    else:
+        cwd = os.path.expanduser(working_dir)
+        if not os.path.exists(cwd):
+            sys.stderr.write('Error: %s does not exist.\n' % (cwd,))
+            return 1, '', 'Error: %s does not exist.\n' % (cwd,), 0
+
+    process, stdout, stderr, command_time = shell_execute(formatted_command, cwd, buffer_output)
+    return process.returncode, stdout, stderr, command_time
 
 
 @click.command(name=PROG_NAME)
@@ -574,6 +722,17 @@ def execute_command_in_dependencies(
     '--repos', is_flag=True,
     help='Instead of projects the enumeration procedure will use the containing repositories'
          ' instead of projects them selves')
+@click.option(
+    '--jobs', '-j', default=1,
+    help='Run commands in parallel using multiple processes')
+@click.option(
+    '--jobs-unordered', is_flag=True,
+    help='Will run jobs without any specific order (useful if dependencies are not important and '
+        'jobs > 1 to run more jobs concurrently).')
+@click.option(
+    '--deps-reversed', is_flag=True,
+    help='Will run with a reversed dependency (only used if --jobs=1). Useful to identify where the'
+        'order is important.')
 def cli(
     command,
     project,
@@ -587,6 +746,9 @@ def cli(
     skip_project,
     force_color,
     repos,
+    jobs,
+    jobs_unordered,
+    deps_reversed,
 ):
     """
     Program to list dependencies of a project, or to execute a command for
@@ -634,6 +796,8 @@ def cli(
 
       This is equivalent to pass "--ignore-project=old_project --ignore-project=fuzzy_project"
     """
+    import time
+    initial_time = time.time()
     global _click_echo_color
     original_auto_wrap_for_ansi = click.utils.auto_wrap_for_ansi
     try:
@@ -675,6 +839,9 @@ def cli(
 
         deps_in_order = obtain_dependencies_ordered_for_execution(root_deps)
 
+        if deps_reversed:
+            deps_in_order = list(reversed(deps_in_order))
+
         if not command:
             deps_to_output = [
                 dep.name for dep in deps_in_order
@@ -692,7 +859,12 @@ def cli(
             verbose=verbose,
             continue_on_failure=continue_on_failure,
             here=here,
+            jobs=jobs,
+            jobs_unordered=jobs_unordered,
         )
+
+        click.secho('Total time: %.2fs' % (time.time() - initial_time,))
+
         execution_return = sorted(execution_return, key=abs)
         sys.exit(execution_return[-1] if execution_return else 1)
     finally:
@@ -700,7 +872,7 @@ def cli(
         click.utils.auto_wrap_for_ansi = original_auto_wrap_for_ansi
 
 
-def shell_execute(command):
+def shell_execute(command, cwd, buffer_output=False):
     """
     Wrapper function the execute the command.
     This function exists solely to be overwritten on tests since subprocess output is not captured
@@ -709,14 +881,23 @@ def shell_execute(command):
 
     :type command: unicode | list(unicode)
 
-    :rtype: subprocess.Popen
-    :return: the process object used to run the command.
+    :param bool buffer_output:
+        If True the output of the process in piped and properly returned afterwards.
+
+    :return tuple(subprocess.Popen, unicode, unicode, float):
+        Return tuple with the process object used to run the command, stdout, stderr, time to execute.
     """
+    import time
+    curtime = time.time()
     # Note: could use something like this for more robustness:
     # http://stackoverflow.com/questions/13243807/popen-waiting-for-child-process-even-when-the-immediate-child-has-terminated/13256908#13256908
-    process = subprocess.Popen(command, shell=True)
-    process.communicate()
-    return process
+    if buffer_output:
+        process = subprocess.Popen(
+            command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, cwd=cwd)
+    else:
+        process = subprocess.Popen(command, shell=True, cwd=cwd)
+    stdout, stderr = process.communicate()
+    return process, stdout, stderr, time.time() - curtime
 
 
 def main_func():

@@ -1,14 +1,14 @@
 from __future__ import unicode_literals
 
+from deps import deps_cli
 import os
 import stat
 import sys
 import textwrap
-from builtins import str
 
-import pytest
 from _pytest.pytester import LineMatcher
-from deps import deps_cli
+from builtins import str
+import pytest
 
 
 @pytest.fixture(scope='session')
@@ -95,7 +95,7 @@ def test_deps_help(cli_runner):
     :type cli_runner: click.testing.CliRunner
     """
     result = cli_runner.invoke(deps_cli.cli, ['--help'])
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
         'Usage: deps [OPTIONS] [COMMAND]...',  # Basic usage.
@@ -182,7 +182,7 @@ def test_execution_on_project_dir(cli_runner, project_tree, monkeypatch):
     monkeypatch.chdir(project_tree.join('root_b'))
     command_args = ['-v', '--', 'python', '-c', '"name: {name}"']
     result = cli_runner.invoke(deps_cli.cli, command_args)
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
         'dep_z',
@@ -216,7 +216,7 @@ def test_here_flag(cli_runner, project_tree, monkeypatch):
     monkeypatch.chdir(project_tree.join('root_b'))
     command_args = ['-v', '--here', '--', 'python', '-c', '"name: {name}"']
     result = cli_runner.invoke(deps_cli.cli, command_args)
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     matcher = LineMatcher(result.output.splitlines())
     # Current working directory is not changed.
     matcher.fnmatch_lines([
@@ -409,7 +409,7 @@ def test_ignore_projects(
     configure_ignored_projects()
 
     result = cli_runner.invoke(deps_cli.cli, command_args, env=extra_env)
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     assert result.output == textwrap.dedent(
         '''\
         dep_a.2
@@ -468,7 +468,7 @@ def test_skip_projects(
     configure_skipped_projects()
 
     result = cli_runner.invoke(deps_cli.cli, command_args, env=extra_env)
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     assert result.output == textwrap.dedent(
         '''\
         dep_a.1.2
@@ -530,7 +530,7 @@ def test_conflict_ignore_skip_projects(
     configure_skipped_projects()
 
     result = cli_runner.invoke(deps_cli.cli, command_args, env=extra_env)
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     assert result.output == textwrap.dedent(
         '''\
         dep_z
@@ -802,3 +802,105 @@ def test_list_repos_precedence(mode, cli_runner, project_tree, piped_shell_execu
             '*[\\/]test_projects0[\\/]root_d',
             '    *[\\/]test_projects0[\\/]d',
         ])
+
+
+def test_deps_parallel_unordered(cli_runner, project_tree, monkeypatch):
+    """
+    :type cli_runner: click.testing.CliRunner
+    :type project_tree: py.path.local
+    :type piped_shell_execute: mocker.patch
+    """
+    monkeypatch.chdir(project_tree.join('root_b'))
+    command_args = ['--jobs=2', '--jobs-unordered', '--', 'python', '-c', '"name: {name}"']
+
+    result = cli_runner.invoke(deps_cli.cli, command_args)
+    assert result.exit_code == 0, result.output
+    matcher = LineMatcher(result.output.splitlines())
+    matcher.fnmatch_lines_random([
+        '=======================================================================================================================',
+        'dep_z, dep_b.1.1, dep_b.1, root_b',
+        'Finished: dep_z in *',
+        'Finished: dep_b.1.1 in *',
+        'Finished: root_b in *',
+        'Finished: dep_b.1 in *',
+    ])
+
+def test_deps_parallel_unordered_error(cli_runner, project_tree, monkeypatch, piped_shell_execute):
+    """
+    :type cli_runner: click.testing.CliRunner
+    :type project_tree: py.path.local
+    :type piped_shell_execute: mocker.patch
+    """
+    task_script = os.path.join('tasks', 'does-not-exist')
+
+    monkeypatch.chdir(project_tree.join('root_b'))
+    command_args = ['-v', '--jobs=2', '--jobs-unordered', task_script]
+
+    result = cli_runner.invoke(deps_cli.cli, command_args)
+    assert result.exit_code != 0
+    matcher = LineMatcher(result.output.splitlines())
+    matcher.fnmatch_lines_random([
+        'dep_z, dep_b.1.1, dep_b.1, root_b',
+
+        # We know that this will fail (it'll be the first). Others may fail or may be cancelled, we
+        # can't guarantee.
+        'deps: error: Command failed (project: dep_z)',
+    ])
+
+
+def test_deps_parallel(cli_runner, project_tree, monkeypatch):
+    """
+    :type cli_runner: click.testing.CliRunner
+    :type project_tree: py.path.local
+    :type piped_shell_execute: mocker.patch
+    """
+    monkeypatch.chdir(project_tree.join('root_b'))
+    command_args = ['--jobs=2', '--', 'python', '-c', '"name: {name}"']
+
+    result = cli_runner.invoke(deps_cli.cli, command_args)
+    assert result.exit_code == 0, result.output
+    matcher = LineMatcher(result.output.splitlines())
+    matcher.fnmatch_lines_random([
+        '=======================================================================================================================',
+        'dep_z',
+        'Finished: dep_z in *',
+        '=======================================================================================================================',
+        'dep_b.1.1',
+        'Finished: dep_b.1.1 in *',
+        '=======================================================================================================================',
+        'dep_b.1',
+        'Finished: dep_b.1 in *',
+        '=======================================================================================================================',
+        'root_b',
+        'Finished: root_b in *',
+    ])
+
+def test_deps_parallel_2(cli_runner, project_tree, monkeypatch):
+    """
+    :type cli_runner: click.testing.CliRunner
+    :type project_tree: py.path.local
+    :type piped_shell_execute: mocker.patch
+    """
+    monkeypatch.chdir(project_tree.join('root_a'))
+    command_args = ['--jobs=2', '--', 'python', '-c', '"name: {name}"']
+
+    result = cli_runner.invoke(deps_cli.cli, command_args)
+    assert result.exit_code == 0, result.output
+    matcher = LineMatcher(result.output.splitlines())
+    matcher.fnmatch_lines_random([
+        '=======================================================================================================================',
+        'dep_z',
+        'Finished: dep_z in *',
+        '=======================================================================================================================',
+        'dep_a.2, dep_a.1.1, dep_a.1.2',
+        'Finished: dep_a.2 in *',
+        'Finished: dep_a.1.1 in *',
+        'Finished: dep_a.1.2 in *',
+        '=======================================================================================================================',
+        'dep_a.1',
+        'Finished: dep_a.1 in *',
+        '=======================================================================================================================',
+        'root_a',
+        'Finished: root_a in *',
+    ])
+

@@ -17,15 +17,17 @@ def piped_shell_execute(mocker):
     import click
     import subprocess
 
-    def _piped_shell_execute(command):
+    def _piped_shell_execute(command, cwd, buffer_output=False):
+        # This version always makes the pipe regardless of the buffer_output value and always
+        # redirects everything for stdout.
         process = subprocess.Popen(
-            command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
+            command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True, cwd=cwd)
         stdout, stderr = process.communicate()
         import sys
         if sys.version_info[0] == 3:
             stdout = stdout.decode()
         click.secho(stdout)
-        return process
+        return process, stdout, stderr, 0
     shell_execute = mocker.patch(
         'deps.deps_cli.shell_execute',
         new=_piped_shell_execute,
