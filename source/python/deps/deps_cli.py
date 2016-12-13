@@ -731,7 +731,7 @@ def execute(formatted_command, working_dir, buffer_output=False):
         'jobs > 1 to run more jobs concurrently).')
 @click.option(
     '--deps-reversed', is_flag=True,
-    help='Will run with a reversed dependency (only used if --jobs=1). Useful to identify where the'
+    help='Will run with a reversed dependency (only used if --jobs=1). Useful to identify where the '
         'order is important.')
 def cli(
     command,
