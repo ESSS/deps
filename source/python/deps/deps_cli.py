@@ -112,10 +112,7 @@ class Dep(_Dep):
         return id(self)
 
     def __eq__(self, o):
-        if isinstance(o, Dep):
-            return o is self
-
-        return False
+        return o is self
 
     def __ne__(self, o):
         return not self == o
