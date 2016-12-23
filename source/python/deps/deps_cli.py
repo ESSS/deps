@@ -56,7 +56,7 @@ def echo_error(*args, **kwargs):
 # Customizations
 # ==================================================================================================
 
-FILE_WITH_DEPENDENCIES = 'environment.yml'
+FILE_WITH_DEPENDENCIES = 'environment.devenv.yml'
 
 def memoize(fun):
 
@@ -78,7 +78,7 @@ def get_shallow_dependencies_directories(base_directory):
     """
     :type base_directory: unicode
     :rtype: list(unicode)
-    :return: The first level (does not recursevely list dependencies of dependencies) dependencies
+    :return: The first level (does not recursively list dependencies of dependencies) dependencies
     of the project rooted in the given directory
     """
     import jinja2
@@ -756,7 +756,7 @@ def cli(
 
     To list dependency projects, one per line (if "-p directory" is omitted,
     it will use the current, or will find the first ancestor directory
-    containing an `environment.yml` file):
+    containing an `environment.devenv.yml` file):
 
           deps -p mylib10 -p myotherlib20
 

@@ -59,7 +59,8 @@ platform-windows:build_batch_commands:
     call conda clean --lock
     cd /d K:\{name}
     call conda info
-    call conda env update --prune -n {name}-py{python}
+    call conda install conda-devenv
+    call conda devenv --prune -n {name}-py{python}
     call activate {name}-py{python}
     call conda list
     py.test -l --junit-xml=K:/{name}/build/tests/{name}-pytest.xml
@@ -78,10 +79,9 @@ platform-linux:build_shell_commands:
         fi
         export CONDARC=$WORKSPACE/.condarc
         conda info
-        conda env update --prune -n {name}-py{python}
+        conda install conda-devenv
+        conda devenv --prune -n {name}-py{python}
         source activate {name}-py{python}
         conda list
         py.test -l --junit-xml=$WORKSPACE/{name}/build/tests/{name}-pytest.xml
     "
-
-
