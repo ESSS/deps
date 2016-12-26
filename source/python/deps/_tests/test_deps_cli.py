@@ -42,12 +42,12 @@ def project_tree(tmpdir_factory):
         proj_path = proj.split('/')
         proj_dir = test_projects.ensure(*proj_path, dir=True)
         test_projects.ensure(proj_path[0], '.git', dir=True)  # Fake git repo.
-        env_yml = proj_dir.join('environment.yml')
+        env_yml = proj_dir.join('environment.devenv.yml')
         env_content = ['name: {}'.format(proj), '']
         if len(deps) > 0:
             env_content.append('includes:')
             env_content.extend(
-                ['  - {{{{ root }}}}/../{}/environment.yml'.format(dep) for dep in deps])
+                ['  - {{{{ root }}}}/../{}/environment.devenv.yml'.format(dep) for dep in deps])
             env_content.append('')
         env_yml.write('\n'.join(env_content))
     # Add a non-project folder.
@@ -159,7 +159,7 @@ def test_cant_find_root(cli_runner, project_tree, piped_shell_execute):
     assert result.exit_code != 0
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
-        'deps: error: could not find "environment.yml" for "*[\\/]test_projects0[\\/]not_a_project".',
+        'deps: error: could not find "environment.devenv.yml" for "*[\\/]test_projects0[\\/]not_a_project".',
     ])
 
     proj_dir = str(project_tree.join('not_a_valid_folder'))
@@ -169,7 +169,7 @@ def test_cant_find_root(cli_runner, project_tree, piped_shell_execute):
     assert result.exit_code != 0
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
-        'deps: error: could not find "environment.yml" for "*[\\/]test_projects0[\\/]not_a_valid_folder".',
+        'deps: error: could not find "environment.devenv.yml" for "*[\\/]test_projects0[\\/]not_a_valid_folder".',
     ])
 
 
