@@ -313,7 +313,7 @@ def test_script_return_code(cli_runner, project_tree, piped_shell_execute):
         'deps: executing: tasks[\\/]does-not-exist dep_z *[\\/]test_projects0[\\/]dep_z',
         'deps: from:      *[\\/]test_projects0[\\/]dep_z',
         'deps: return code: *',
-        'deps: error: Command failed',
+        'deps: error: Command failed (project: dep_z)',
     ])
 
 
@@ -598,16 +598,27 @@ def test_continue_on_failure(cli_runner, project_tree, piped_shell_execute):
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
         'dep_z',
-        'deps: error: Command failed',
+        'Finished: dep_z in *s',
+        'deps: error: Command failed (project: dep_z)',
 
         'dep_b.1.1',
-        'deps: error: Command failed',
+        'Finished: dep_b.1.1 in *s',
+        'deps: error: Command failed (project: dep_b.1.1)',
 
         'dep_b.1',
-        'deps: error: Command failed',
+        'Finished: dep_b.1 in *s',
+        'deps: error: Command failed (project: dep_b.1)',
 
         'root_b',
-        'deps: error: Command failed',
+        'Finished: root_b in *s',
+        'deps: error: Command failed (project: root_b)',
+
+        # Final report.
+        'deps: error: Command failed (project: dep_z)',
+        'deps: error: Command failed (project: dep_b.1.1)',
+        'deps: error: Command failed (project: dep_b.1)',
+        'deps: error: Command failed (project: root_b)',
+        'Total time: *s',
     ])
 
     # Some fail.
@@ -621,14 +632,24 @@ def test_continue_on_failure(cli_runner, project_tree, piped_shell_execute):
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
         'dep_z',
+        'Finished: dep_z in *s',
 
         'dep_b.1.1',
-        'deps: error: Command failed',
+        'Finished: dep_b.1.1 in *s',
+        'deps: error: Command failed (project: dep_b.1.1)',
 
         'dep_b.1',
-        'deps: error: Command failed',
+        'Finished: dep_b.1 in *s',
+        'deps: error: Command failed (project: dep_b.1)',
 
         'root_b',
+        'Finished: root_b in *s',
+
+        # Final report.
+        'deps: error: A list of all errors follow:',
+        'deps: error: Command failed (project: dep_b.1.1)',
+        'deps: error: Command failed (project: dep_b.1)',
+        'Total time: *s',
     ])
 
     # None fail.

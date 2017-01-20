@@ -501,6 +501,7 @@ def execute_command_in_dependencies(
     error_messages = []
     initial = [x.name for x in dependencies]
     buffer_output = False
+    output_separator = '\n' + '=' * MAX_LINE_LENGTH
 
     if jobs > 1:
         buffer_output = True
@@ -549,7 +550,7 @@ def execute_command_in_dependencies(
         print_str = ', '.join(dep.name for dep in deps)
         for dep in deps:
             if len(deps) == 1 or first:
-                click.secho('\n' + '=' * MAX_LINE_LENGTH, fg='black', bold=True, color=_click_echo_color)
+                click.secho(output_separator, fg='black', bold=True, color=_click_echo_color)
 
             # Checks before execution.
             if dep.ignored:
@@ -616,8 +617,9 @@ def execute_command_in_dependencies(
                     echo_verbose_msg('return code: {}'.format(returncode))
 
             if returncode != 0:
-                error_messages.append('Command failed (project: %s)' % (dep.name,))
-                echo_error('Command failed')
+                error_msg = 'Command failed (project: %s)' % (dep.name,)
+                error_messages.append(error_msg)
+                echo_error(error_msg)
 
                 if not continue_on_failure:
                     # Cancel what can be cancelled in case we had a failure.
@@ -638,6 +640,9 @@ def execute_command_in_dependencies(
     # If we have errors and we kept on going or executed multiple jobs, print a summary of the
     # errors at the end.
     if continue_on_failure or jobs > 1:
+        if error_messages:
+            echo_error(output_separator)
+            echo_error('A list of all errors follow:')
         for msg in error_messages:
             echo_error(msg)
 
