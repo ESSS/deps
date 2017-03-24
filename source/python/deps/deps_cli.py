@@ -1,19 +1,18 @@
 #!/usr/bin/env python
 from __future__ import print_function, unicode_literals
 
-from collections import OrderedDict
-from collections import namedtuple
 import functools
 import io
 import os
+import platform
 import subprocess
 import sys
 import textwrap
+from collections import OrderedDict, namedtuple
 
 import click
 
 from .version import __version__
-
 
 click.disable_unicode_literals_warning = True
 
@@ -74,9 +73,12 @@ def memoize(fun):
     return wrapper
 
 @memoize
-def get_shallow_dependencies_directories(base_directory):
+def get_shallow_dependencies(base_directory, filename=None):
     """
-    :type base_directory: unicode
+    :param unicode base_directory:
+    The project's root directory.
+    :param unicode filename:
+    The environment definition file name. If `None` (or omitted) `FILE_WITH_DEPENDENCIES` is used.
     :rtype: list(unicode)
     :return: The first level (does not recursively list dependencies of dependencies) dependencies
     of the project rooted in the given directory
@@ -84,17 +86,20 @@ def get_shallow_dependencies_directories(base_directory):
     import jinja2
     import yaml
 
-    # NOTE: This is based on code in ESSS branch of conda env, if that
-    #       ever changes, this code here must be updated!
-    jinja_args = {'root': base_directory, 'os': os}
+    if filename is None:
+        filename = FILE_WITH_DEPENDENCIES
 
-    with io.open(os.path.join(base_directory, FILE_WITH_DEPENDENCIES), 'r') as f:
+    # NOTE: From [conda-devenv](https://conda-devenv.readthedocs.io/en/latest/usage.html#jinja2)
+    jinja_args = {'root': base_directory, 'os': os, 'sys': sys, 'platform': platform}
+
+    with io.open(os.path.join(base_directory, filename), 'r') as f:
         yaml_contents = jinja2.Template(f.read()).render(**jinja_args)
 
     data = yaml.load(yaml_contents)
     if 'includes' not in data:
         return []
-    includes = [os.path.abspath(os.path.dirname(p)) for p in data['includes']]
+    includes = [os.path.abspath(p) for p in data['includes']]
+    includes = [(os.path.dirname(p), os.path.basename(p)) for p in includes]
     return includes
 
 
@@ -251,23 +256,24 @@ def obtain_all_dependecies_recursively(root_directories, ignored_projects, skipp
         """
         A data structure (`Dep`) is created for each project rooted in the given directories.
 
-        :param sequence(unicode) directories: Projects' roots to use.
+        :param sequence(tuple(unicode,unicode)) directories: Projects' roots to use.
         :param list(Dep) list_to_add_deps: A list to be populated with the created `Dep`s
         processed `Dep`s (in case multiple projects have the same dependency).
         """
-        for dep_directory in directories:
+        for dep_directory, dep_env_filename in directories:
             if dep_directory not in all_deps:
                 dep = create_new_dep_from_directory(dep_directory, ignored_projects, skipped_projects)
                 all_deps[dep_directory] = dep
                 if not dep.ignored:
-                    current_dep_directories = get_shallow_dependencies_directories(
-                        dep_directory)
+                    current_dep_directories = get_shallow_dependencies(
+                        dep_directory, dep_env_filename)
                     add_deps_from_directories(current_dep_directories, dep.deps)
             else:
                 dep = all_deps[dep_directory]
             list_to_add_deps.append(dep)
 
     root_deps = []
+    root_directories = [(p, None) for p in root_directories]
     add_deps_from_directories(root_directories, root_deps)
     return root_deps
 
@@ -508,7 +514,7 @@ def execute_command_in_dependencies(
         from concurrent.futures.thread import ThreadPoolExecutor
         executor = ThreadPoolExecutor(max_workers=jobs)
         previously_added_to_batch = set()
-        
+
         def calculate_next_batch(dependencies):
             next_batch = []
             if jobs_unordered:
@@ -541,7 +547,7 @@ def execute_command_in_dependencies(
         def calculate_next_batch(dependencies):
             # The next is the first one in the list.
             return [dependencies.pop(0)]
-        
+
 
     while len(dependencies) > 0:
         deps = calculate_next_batch(dependencies)

@@ -1,14 +1,15 @@
 from __future__ import unicode_literals
 
-from deps import deps_cli
 import os
 import stat
 import sys
 import textwrap
-
-from _pytest.pytester import LineMatcher
 from builtins import str
+
 import pytest
+from _pytest.pytester import LineMatcher
+
+from deps import deps_cli
 
 
 @pytest.fixture(scope='session')
@@ -925,3 +926,36 @@ def test_deps_parallel_2(cli_runner, project_tree, monkeypatch):
         'Finished: root_a in *',
     ])
 
+
+def test_no_expected_env_file(cli_runner, tmpdir_factory, piped_shell_execute):
+    test_projects = tmpdir_factory.mktemp('test_projects')
+    projects = {
+        'expected_env_file': ('environment.devenv.yml', ['../unexpected_env_file/foo_environment.devenv.yml'],),
+        'unexpected_env_file': ('foo_environment.devenv.yml', []),
+    }
+    for proj, (env_filename, deps) in projects.items():
+        proj_path = proj.split('/')
+        proj_dir = test_projects.ensure(*proj_path, dir=True)
+        env_yml = proj_dir.join(env_filename)
+        env_content = ['name: {}'.format(proj), '']
+        if len(deps) > 0:
+            env_content.append('includes:')
+            env_content.extend(
+                ['  - {{{{ root }}}}/{}'.format(dep) for dep in deps])
+            env_content.append('')
+        env_yml.write('\n'.join(env_content))
+
+    root = str(test_projects.join('expected_env_file'))
+    # Prepare the invocation.
+    command_args = ['-p', root, 'echo', 'test', '{name}']
+    result = cli_runner.invoke(deps_cli.cli, command_args)
+    assert result.exit_code == 0, result.output
+
+    matcher = LineMatcher(result.output.splitlines())
+    matcher.fnmatch_lines([
+        'unexpected_env_file',
+        'test unexpected_env_file',
+
+        'expected_env_file',
+        'test expected_env_file',
+    ])

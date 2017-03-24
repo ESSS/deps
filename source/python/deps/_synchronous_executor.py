@@ -5,6 +5,7 @@ when running synchronously.
 
 from __future__ import unicode_literals
 
+
 class Future(object):
     def __init__(self, callback, args):
         try:

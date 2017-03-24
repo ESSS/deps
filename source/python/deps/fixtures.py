@@ -1,6 +1,7 @@
 from __future__ import unicode_literals
-from click.testing import CliRunner
+
 import pytest
+from click.testing import CliRunner
 
 
 @pytest.yield_fixture
@@ -33,4 +34,3 @@ def piped_shell_execute(mocker):
         new=_piped_shell_execute,
     )
     return shell_execute
-
