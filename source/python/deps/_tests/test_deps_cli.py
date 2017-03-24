@@ -1,14 +1,15 @@
 from __future__ import unicode_literals
 
-from deps import deps_cli
 import os
 import stat
 import sys
 import textwrap
-
-from _pytest.pytester import LineMatcher
 from builtins import str
+
 import pytest
+from _pytest.pytester import LineMatcher
+
+from deps import deps_cli
 
 
 @pytest.fixture(scope='session')
@@ -958,4 +959,3 @@ def test_no_expected_env_file(cli_runner, tmpdir_factory, piped_shell_execute):
         'expected_env_file',
         'test expected_env_file',
     ])
-

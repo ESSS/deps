@@ -1,20 +1,18 @@
 #!/usr/bin/env python
 from __future__ import print_function, unicode_literals
 
-import platform
-from collections import OrderedDict
-from collections import namedtuple
 import functools
 import io
 import os
+import platform
 import subprocess
 import sys
 import textwrap
+from collections import OrderedDict, namedtuple
 
 import click
 
 from .version import __version__
-
 
 click.disable_unicode_literals_warning = True
 
@@ -516,7 +514,7 @@ def execute_command_in_dependencies(
         from concurrent.futures.thread import ThreadPoolExecutor
         executor = ThreadPoolExecutor(max_workers=jobs)
         previously_added_to_batch = set()
-        
+
         def calculate_next_batch(dependencies):
             next_batch = []
             if jobs_unordered:
@@ -549,7 +547,7 @@ def execute_command_in_dependencies(
         def calculate_next_batch(dependencies):
             # The next is the first one in the list.
             return [dependencies.pop(0)]
-        
+
 
     while len(dependencies) > 0:
         deps = calculate_next_batch(dependencies)
