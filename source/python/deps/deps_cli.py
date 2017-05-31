@@ -609,10 +609,17 @@ def execute_command_in_dependencies(
             if buffer_output:
                 if stdout:
                     click.secho('=== STDOUT ===')
+                    if sys.version_info[0] >= 3:
+                        if type(stdout) != type(''):
+                            stdout = stdout.decode('utf-8', errors='replace')
+
                     click.secho(stdout)
 
                 if stderr:
                     click.secho('=== STDERR ===', fg='red', bold=True)
+                    if sys.version_info[0] >= 3:
+                        if type(stdout) != type(''):
+                            stderr = stderr.decode('utf-8', errors='replace')
                     click.secho(stderr, fg='red', bold=True)
 
 

@@ -926,6 +926,19 @@ def test_deps_parallel_2(cli_runner, project_tree, monkeypatch):
         'Finished: root_a in *',
     ])
 
+def test_deps_parallel_3(cli_runner, project_tree, monkeypatch):
+    """
+    :type cli_runner: click.testing.CliRunner
+    :type project_tree: py.path.local
+    :type piped_shell_execute: mocker.patch
+    """
+    monkeypatch.chdir(project_tree.join('root_a'))
+    command_args = ['--jobs=2', '--', 'python', '-c', 'import sys;print("foo")']
+
+    result = cli_runner.invoke(deps_cli.cli, command_args)
+    assert result.exit_code == 0, result.output
+    assert result.output.count('=== STDOUT ===') == 6
+    assert result.output.count('foo') == 6
 
 def test_no_expected_env_file(cli_runner, tmpdir_factory, piped_shell_execute):
     test_projects = tmpdir_factory.mktemp('test_projects')
