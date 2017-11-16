@@ -1,6 +1,6 @@
 import sys
 
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
 other_locals = {}
 with open('source/python/deps/version.py') as f:
@@ -25,6 +25,7 @@ setup(
     author='ESSS',
     author_email='dev@esss.com.br',
     url='https://eden.esss.com.br/stash/projects/ESSS/repos/deps/browse',
+    license='MIT',
     packages=find_packages('source/python'),
     package_dir={'':'source/python'},
     entry_points={
