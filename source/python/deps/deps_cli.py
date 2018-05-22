@@ -618,7 +618,7 @@ def execute_command_in_dependencies(
                 if stderr:
                     click.secho('=== STDERR ===', fg='red', bold=True)
                     if sys.version_info[0] >= 3:
-                        if type(stdout) != type(''):
+                        if type(stderr) != type(''):
                             stderr = stderr.decode('utf-8', errors='replace')
                     click.secho(stderr, fg='red', bold=True)
 
