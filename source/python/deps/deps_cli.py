@@ -95,7 +95,7 @@ def get_shallow_dependencies(base_directory, filename=None):
     with io.open(os.path.join(base_directory, filename), 'r') as f:
         yaml_contents = jinja2.Template(f.read()).render(**jinja_args)
 
-    data = yaml.load(yaml_contents)
+    data = yaml.load(yaml_contents) or {}
     if 'includes' not in data:
         return []
     includes = [os.path.abspath(p) for p in data['includes']]

@@ -2,3 +2,4 @@
 .idea/
 .cache/
 environment.yml
+/**/.pytest_cache
