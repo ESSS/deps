@@ -972,3 +972,20 @@ def test_no_expected_env_file(cli_runner, tmpdir_factory, piped_shell_execute):
         'expected_env_file',
         'test expected_env_file',
     ])
+
+
+def test_empty_environment(cli_runner, tmpdir_factory, piped_shell_execute):
+    test_project = tmpdir_factory.mktemp('test_empty_environment')
+    proj_dir = test_project.ensure('project_with_empty_environment', dir=True)
+    env_yml = proj_dir.join('environment.devenv.yml')
+    env_yml.write('')
+
+    root = str(proj_dir)
+    command_args = ['-p', root, 'echo', 'test', '{name}']
+    result = cli_runner.invoke(deps_cli.cli, command_args)
+    assert result.exit_code == 0, result.output
+
+    matcher = LineMatcher(result.output.splitlines())
+    matcher.fnmatch_lines([
+        'project_with_empty_environment',
+    ])
