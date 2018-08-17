@@ -1,1 +1,1 @@
-__version__ = '0.15'  # No unicode here.
+__version__ = '1.0.0'  # No unicode here.
