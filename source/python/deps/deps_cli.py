@@ -549,8 +549,11 @@ def execute_command_in_dependencies(
             return [dependencies.pop(0)]
 
 
+    progress = 0
+    total_progress = len(dependencies)
     while len(dependencies) > 0:
         deps = calculate_next_batch(dependencies)
+        progress += len(deps)
         dep_to_future = {}
         first = True
         print_str = ', '.join(dep.name for dep in deps)
@@ -579,7 +582,8 @@ def execute_command_in_dependencies(
                 working_dir = dep.abspath
 
             if len(deps) == 1 or first:
-                click.secho(print_str, fg='blue', bold=True, color=_click_echo_color)
+                msg = '%s (%d/%d)' % (print_str, progress, total_progress)
+                click.secho(msg, fg='blue', bold=True, color=_click_echo_color)
             if verbose or dry_run:
                 command_to_print = ' '.join(
                     arg.replace(' ', '\\ ') for arg in formatted_command)
