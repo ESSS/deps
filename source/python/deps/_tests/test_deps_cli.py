@@ -186,22 +186,22 @@ def test_execution_on_project_dir(cli_runner, project_tree, monkeypatch):
     assert result.exit_code == 0, result.output
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
-        'dep_z',
+        'dep_z (1/4)',
         'deps: executing: python -c "name:\\ dep_z"',
         'deps: from:      *[\\/]test_projects0[\\/]dep_z',
         'deps: return code: 0',
 
-        'dep_b.1.1',
+        'dep_b.1.1 (2/4)',
         'deps: executing: python -c "name:\\ dep_b.1.1"',
         'deps: from:      *[\\/]test_projects0[\\/]bs[\\/]dep_b.1.1',
         'deps: return code: 0',
 
-        'dep_b.1',
+        'dep_b.1 (3/4)',
         'deps: executing: python -c "name:\\ dep_b.1"',
         'deps: from:      *[\\/]test_projects0[\\/]bs[\\/]dep_b.1',
         'deps: return code: 0',
 
-        'root_b',
+        'root_b (4/4)',
         'deps: executing: python -c "name:\\ root_b"',
         'deps: from:      *[\\/]test_projects0[\\/]root_b',
         'deps: return code: 0',
@@ -221,19 +221,19 @@ def test_here_flag(cli_runner, project_tree, monkeypatch):
     matcher = LineMatcher(result.output.splitlines())
     # Current working directory is not changed.
     matcher.fnmatch_lines([
-        'dep_z',
+        'dep_z (1/4)',
         'deps: executing: python -c "name:\\ dep_z"',
         'deps: return code: 0',
 
-        'dep_b.1.1',
+        'dep_b.1.1 (2/4)',
         'deps: executing: python -c "name:\\ dep_b.1.1"',
         'deps: return code: 0',
 
-        'dep_b.1',
+        'dep_b.1 (3/4)',
         'deps: executing: python -c "name:\\ dep_b.1"',
         'deps: return code: 0',
 
-        'root_b',
+        'root_b (4/4)',
         'deps: executing: python -c "name:\\ root_b"',
         'deps: return code: 0',
     ])
@@ -277,7 +277,7 @@ def test_script_execution(cli_runner, project_tree, piped_shell_execute):
     assert result.exit_code == 0, result.output
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
-        'dep_z',
+        'dep_z (1/4)',
         'deps: executing: tasks[\\/]asd dep_z *[\\/]test_projects0[\\/]dep_z',
         'deps: from:      *[\\/]test_projects0[\\/]dep_z',
         'Sample script dep_z *[\\/]test_projects0[\\/]dep_z',
@@ -288,7 +288,7 @@ def test_script_execution(cli_runner, project_tree, piped_shell_execute):
 
         'dep_b.1: skipping since "*[\\/]tasks[\\/]asd" does not exist',
 
-        'root_b',
+        'root_b (4/4)',
         'deps: executing: tasks[\\/]asd root_b *[\\/]test_projects0[\\/]root_b',
         'deps: from:      *[\\/]test_projects0[\\/]root_b',
         'Sample script root_b *[\\/]test_projects0[\\/]root_b',
@@ -310,7 +310,7 @@ def test_script_return_code(cli_runner, project_tree, piped_shell_execute):
     assert result.exit_code != 0
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
-        'dep_z',
+        'dep_z (1/4)',
         'deps: executing: tasks[\\/]does-not-exist dep_z *[\\/]test_projects0[\\/]dep_z',
         'deps: from:      *[\\/]test_projects0[\\/]dep_z',
         'deps: return code: *',
@@ -397,10 +397,10 @@ def test_ignore_projects(
 
         'dep_z ignored',
 
-        'dep_a.2',
+        'dep_a.2 (3/4)',
         'test dep_a.2',
 
-        'root_a',
+        'root_a (4/4)',
         'test root_a',
     ])
 
@@ -452,14 +452,14 @@ def test_skip_projects(
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
         'dep_z skipped',
-        'dep_a.1.2',
+        'dep_a.1.2 (2/6)',
         'test dep_a.1.2',
-        'dep_a.1.1',
+        'dep_a.1.1 (3/6)',
         'test dep_a.1.1',
-        'dep_a.2',
+        'dep_a.2 (4/6)',
         'test dep_a.2',
         'dep_a.1 skipped',
-        'root_a',
+        'root_a (6/6)',
         'test root_a',
     ])
 
@@ -515,13 +515,13 @@ def test_conflict_ignore_skip_projects(
     matcher.fnmatch_lines([
         'dep_a.1 ignored',
 
-        'dep_z',
+        'dep_z (2/4)',
         'test dep_z',
 
-        'dep_a.2',
+        'dep_a.2 (3/4)',
         'test dep_a.2',
 
-        'root_a',
+        'root_a (4/4)',
         'test root_a',
     ])
 
@@ -555,7 +555,7 @@ def test_require_file(cli_runner, project_tree, piped_shell_execute):
     assert result.exit_code == 0, result.output
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
-        'dep_z',
+        'dep_z (1/4)',
         'deps: executing: echo This is dep_z',
         'deps: from:      *[\\/]test_projects0[\\/]dep_z',
         'This is dep_z',
@@ -565,7 +565,7 @@ def test_require_file(cli_runner, project_tree, piped_shell_execute):
 
         'dep_b.1: skipping since "*[\\/]test_projects0[\\/]bs[\\/]dep_b.1[\\/]tasks[\\/]asd" does not exist',
 
-        'root_b',
+        'root_b (4/4)',
         'deps: executing: echo This is root_b',
         'deps: from:      *[\\/]test_projects0[\\/]root_b',
         'This is root_b',
@@ -598,19 +598,19 @@ def test_continue_on_failure(cli_runner, project_tree, piped_shell_execute):
     assert result.exit_code != 0, result.output
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
-        'dep_z',
+        'dep_z (1/4)',
         'Finished: dep_z in *s',
         'deps: error: Command failed (project: dep_z)',
 
-        'dep_b.1.1',
+        'dep_b.1.1 (2/4)',
         'Finished: dep_b.1.1 in *s',
         'deps: error: Command failed (project: dep_b.1.1)',
 
-        'dep_b.1',
+        'dep_b.1 (3/4)',
         'Finished: dep_b.1 in *s',
         'deps: error: Command failed (project: dep_b.1)',
 
-        'root_b',
+        'root_b (4/4)',
         'Finished: root_b in *s',
         'deps: error: Command failed (project: root_b)',
 
@@ -632,18 +632,18 @@ def test_continue_on_failure(cli_runner, project_tree, piped_shell_execute):
     assert result.exit_code != 0, result.output
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
-        'dep_z',
+        'dep_z (1/4)',
         'Finished: dep_z in *s',
 
-        'dep_b.1.1',
+        'dep_b.1.1 (2/4)',
         'Finished: dep_b.1.1 in *s',
         'deps: error: Command failed (project: dep_b.1.1)',
 
-        'dep_b.1',
+        'dep_b.1 (3/4)',
         'Finished: dep_b.1 in *s',
         'deps: error: Command failed (project: dep_b.1)',
 
-        'root_b',
+        'root_b (4/4)',
         'Finished: root_b in *s',
 
         # Final report.
@@ -840,7 +840,7 @@ def test_deps_parallel_unordered(cli_runner, project_tree, monkeypatch):
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines_random([
         '=======================================================================================================================',
-        'dep_z, dep_b.1.1, dep_b.1, root_b',
+        'dep_z, dep_b.1.1, dep_b.1, root_b (4/4)',
         'Finished: dep_z in *',
         'Finished: dep_b.1.1 in *',
         'Finished: root_b in *',
@@ -862,7 +862,7 @@ def test_deps_parallel_unordered_error(cli_runner, project_tree, monkeypatch, pi
     assert result.exit_code != 0
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines_random([
-        'dep_z, dep_b.1.1, dep_b.1, root_b',
+        'dep_z, dep_b.1.1, dep_b.1, root_b (4/4)',
 
         # We know that this will fail (it'll be the first). Others may fail or may be cancelled, we
         # can't guarantee.
@@ -884,16 +884,16 @@ def test_deps_parallel(cli_runner, project_tree, monkeypatch):
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines_random([
         '=======================================================================================================================',
-        'dep_z',
+        'dep_z (1/4)',
         'Finished: dep_z in *',
         '=======================================================================================================================',
-        'dep_b.1.1',
+        'dep_b.1.1 (2/4)',
         'Finished: dep_b.1.1 in *',
         '=======================================================================================================================',
-        'dep_b.1',
+        'dep_b.1 (3/4)',
         'Finished: dep_b.1 in *',
         '=======================================================================================================================',
-        'root_b',
+        'root_b (4/4)',
         'Finished: root_b in *',
     ])
 
@@ -911,18 +911,18 @@ def test_deps_parallel_2(cli_runner, project_tree, monkeypatch):
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines_random([
         '=======================================================================================================================',
-        'dep_z',
+        'dep_z (1/6)',
         'Finished: dep_z in *',
         '=======================================================================================================================',
-        'dep_a.2, dep_a.1.1, dep_a.1.2',
+        'dep_a.2, dep_a.1.1, dep_a.1.2 (4/6)',
         'Finished: dep_a.2 in *',
         'Finished: dep_a.1.1 in *',
         'Finished: dep_a.1.2 in *',
         '=======================================================================================================================',
-        'dep_a.1',
+        'dep_a.1 (5/6)',
         'Finished: dep_a.1 in *',
         '=======================================================================================================================',
-        'root_a',
+        'root_a (6/6)',
         'Finished: root_a in *',
     ])
 
@@ -966,10 +966,10 @@ def test_no_expected_env_file(cli_runner, tmpdir_factory, piped_shell_execute):
 
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
-        'unexpected_env_file',
+        'unexpected_env_file (1/2)',
         'test unexpected_env_file',
 
-        'expected_env_file',
+        'expected_env_file (2/2)',
         'test expected_env_file',
     ])
 
@@ -987,5 +987,5 @@ def test_empty_environment(cli_runner, tmpdir_factory, piped_shell_execute):
 
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines([
-        'project_with_empty_environment',
+        'project_with_empty_environment (1/1)',
     ])
