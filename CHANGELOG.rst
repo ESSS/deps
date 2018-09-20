@@ -1,4 +1,4 @@
-Next ()
+1.1.0 (2018-09-20)
 ------------------
 
 * Print some sort of progress in execution headers.
