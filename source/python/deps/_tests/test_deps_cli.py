@@ -1,5 +1,3 @@
-from __future__ import unicode_literals
-
 import os
 import stat
 import sys
@@ -246,7 +244,7 @@ def test_multiple_projects(cli_runner, project_tree):
     """
     projects = ['root_a', 'root_b']
     projects = [str(project_tree.join(name)) for name in projects]
-    command_args = [('--project=%s' % (project,)) for project in projects]
+    command_args = [('--project={}'.format(project)) for project in projects]
     result = cli_runner.invoke(deps_cli.cli, command_args)
     assert result.exit_code == 0, result.output
     assert result.output == textwrap.dedent(
@@ -342,7 +340,7 @@ def test_force_color(
     """
     def configure_force_color():
         if use_env_var:
-            extra_env[str('DEPS_FORCE_COLOR')] = str('1') if force else str('0')
+            extra_env['DEPS_FORCE_COLOR'] = '1' if force else '0'
         else:
             command_args.insert(0, '--force-color' if force else '--no-force-color')
 
@@ -379,7 +377,7 @@ def test_ignore_projects(
     """
     def configure_ignored_projects():
         if use_env_var:
-            extra_env[str('DEPS_IGNORE_PROJECT')] = str('dep_a.1%sdep_z' % (os.pathsep,))
+            extra_env['DEPS_IGNORE_PROJECT'] = str('dep_a.1{}dep_z'.format(os.pathsep))
         else:
             command_args.insert(0, '--ignore-project=dep_a.1')
             command_args.insert(1, '--ignore-project=dep_z')
@@ -437,7 +435,7 @@ def test_skip_projects(
     """
     def configure_skipped_projects():
         if use_env_var:
-            extra_env[str('DEPS_SKIP_PROJECT')] = str('dep_a.1%sdep_z' % (os.pathsep,))
+            extra_env['DEPS_SKIP_PROJECT'] = str('dep_a.1{}dep_z'.format(os.pathsep))
         else:
             command_args.insert(0, '--skip-project=dep_a.1')
             command_args.insert(1, '--skip-project=dep_z')
@@ -498,8 +496,8 @@ def test_conflict_ignore_skip_projects(
     """
     def configure_skipped_projects():
         if use_env_var:
-            extra_env[str('DEPS_SKIP_PROJECT')] = str('dep_a.1')
-            extra_env[str('DEPS_IGNORE_PROJECT')] = str('dep_a.1')
+            extra_env['DEPS_SKIP_PROJECT'] = 'dep_a.1'
+            extra_env['DEPS_IGNORE_PROJECT'] = 'dep_a.1'
         else:
             command_args.insert(0, '--skip-project=dep_a.1')
             command_args.insert(0, '--ignore-project=dep_a.1')

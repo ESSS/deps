@@ -1,19 +1,14 @@
-{% set PY2 = os.environ.get('CONDA_PY', '27') < '35' %}
-{% set PY3 = not PY2 %}
 name: deps
 
 dependencies:
-  - python {{'<3' if PY2 else '>=3'}}
+  - python >=3.6
   - click
   - colorama
-  - mock<2
+  - pytest >=5
   - pytest-mock
   - jinja2
   - pyyaml
   - future
-  {% if PY2 %}
-  - futures
-  {% endif %}
 
 environment:
   PYTHONPATH:

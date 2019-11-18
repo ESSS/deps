@@ -1,5 +1,3 @@
-from __future__ import unicode_literals
-
 import pytest
 from click.testing import CliRunner
 
@@ -24,9 +22,7 @@ def piped_shell_execute(mocker):
         process = subprocess.Popen(
             command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True, cwd=cwd)
         stdout, stderr = process.communicate()
-        import sys
-        if sys.version_info[0] == 3:
-            stdout = stdout.decode()
+        stdout = stdout.decode()
         click.secho(stdout)
         return process, stdout, stderr, 0
     shell_execute = mocker.patch(
