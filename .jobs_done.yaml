@@ -3,8 +3,7 @@ matrix:
   - win64,windows
   - linux64,linux,release
   python:
-  - 27
-  - 35
+  - 36
 
 
 branch_patterns:

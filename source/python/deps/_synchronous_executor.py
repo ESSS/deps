@@ -3,10 +3,9 @@ Helper module to create a synchronous executor to be used replacing the ThreadPo
 when running synchronously.
 '''
 
-from __future__ import unicode_literals
 
 
-class Future(object):
+class Future:
     def __init__(self, callback, args):
         try:
             self._result = callback(*args)

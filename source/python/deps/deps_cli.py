@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-from __future__ import print_function, unicode_literals
 
 import functools
 import io
@@ -92,7 +91,7 @@ def get_shallow_dependencies(base_directory, filename=None):
     # NOTE: From [conda-devenv](https://conda-devenv.readthedocs.io/en/latest/usage.html#jinja2)
     jinja_args = {'root': base_directory, 'os': os, 'sys': sys, 'platform': platform}
 
-    with io.open(os.path.join(base_directory, filename), 'r') as f:
+    with open(os.path.join(base_directory, filename), 'r') as f:
         yaml_contents = jinja2.Template(f.read()).render(**jinja_args)
 
     data = yaml.safe_load(yaml_contents) or {}
@@ -525,7 +524,7 @@ def execute_command_in_dependencies(
                 for i, dep in reversed(list(enumerate(dependencies))):
                     for depends_on in get_abs_path_to_dep_for_all_deps(dep).values():
                         if depends_on not in previously_added_to_batch:
-                            msg.append('%s still depending on: %s' % (dep.name, depends_on.name))
+                            msg.append('{} still depending on: {}'.format(dep.name, depends_on.name))
                             break
                     else:
                         next_batch.append(dependencies.pop(i))
@@ -609,21 +608,20 @@ def execute_command_in_dependencies(
 
             exit_codes.append(returncode)
 
-            click.secho('Finished: %s in %.2fs' % (dep.name, command_time), fg='white', bold=False, color=_click_echo_color)
+            click.secho('Finished: {} in {:.2f}s'.format(dep.name, command_time), fg='white', bold=False, color=_click_echo_color)
             if buffer_output:
                 if stdout:
                     click.secho('=== STDOUT ===')
-                    if sys.version_info[0] >= 3:
-                        if type(stdout) != type(''):
-                            stdout = stdout.decode('utf-8', errors='replace')
+
+                    if type(stdout) is not str:
+                        stdout = stdout.decode('utf-8', errors='replace')
 
                     click.secho(stdout)
 
                 if stderr:
                     click.secho('=== STDERR ===', fg='red', bold=True)
-                    if sys.version_info[0] >= 3:
-                        if type(stderr) != type(''):
-                            stderr = stderr.decode('utf-8', errors='replace')
+                    if type(stderr) is not str:
+                        stderr = stderr.decode('utf-8', errors='replace')
                     click.secho(stderr, fg='red', bold=True)
 
 
@@ -634,7 +632,7 @@ def execute_command_in_dependencies(
                     echo_verbose_msg('return code: {}'.format(returncode))
 
             if returncode != 0:
-                error_msg = 'Command failed (project: %s)' % (dep.name,)
+                error_msg = 'Command failed (project: {})'.format(dep.name)
                 error_messages.append(error_msg)
                 echo_error(error_msg)
 
@@ -694,8 +692,8 @@ def execute(formatted_command, working_dir, buffer_output=False):
     else:
         cwd = os.path.expanduser(working_dir)
         if not os.path.exists(cwd):
-            sys.stderr.write('Error: %s does not exist.\n' % (cwd,))
-            return 1, '', 'Error: %s does not exist.\n' % (cwd,), 0
+            sys.stderr.write('Error: {} does not exist.\n'.format(cwd))
+            return 1, '', 'Error: {} does not exist.\n'.format(cwd), 0
 
     process, stdout, stderr, command_time = shell_execute(formatted_command, cwd, buffer_output)
     return process.returncode, stdout, stderr, command_time
@@ -885,7 +883,7 @@ def cli(
             jobs_unordered=jobs_unordered,
         )
 
-        click.secho('Total time: %.2fs' % (time.time() - initial_time,))
+        click.secho('Total time: {:.2f}s'.format(time.time() - initial_time))
 
         execution_return = sorted(execution_return, key=abs)
         sys.exit(execution_return[-1] if execution_return else 1)
