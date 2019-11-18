@@ -1,0 +1,25 @@
+name: build
+
+on: [push, pull_request]
+
+jobs:
+  build:
+
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+    - name: Install conda
+      run: choco install miniconda3
+    - name: Configure conda
+      run: |
+        conda config --append channels conda-forge
+        conda config --set always_yes true
+    - name: Test
+      run: |
+        conda activate deps
+        pytest source/python
