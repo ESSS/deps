@@ -11,15 +11,26 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
+        include:
+          - os: "ubuntu-latest"
+            shell_exec: "bash -c"
+            activate_cmd: "source activate"
+          - os: "windows-latest"
+            shell_exec: "cmd.exe /c"
+            activate_cmd: "activate"
 
     steps:
-    - name: Install conda
-      run: choco install miniconda3
-    - name: Configure conda
+    - uses: actions/checkout@v1
+    - name: Setup conda
+      uses: s-weigand/setup-conda@master
+      with:
+        update-conda: true
+        python-version: 3.6
+        conda-channels: anaconda, conda-forge
+    - name: conda-devenv
       run: |
-        conda config --append channels conda-forge
-        conda config --set always_yes true
+        conda install conda-devenv
+        conda-devenv
     - name: Test
       run: |
-        conda activate deps
-        pytest source/python
+        ${{ matrix.shell_exec }} "${{ matrix.activate_cmd }} deps && python -m pytest source/python"

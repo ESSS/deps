@@ -1,6 +1,9 @@
 Deps
-=====
+====
 
+[![link](https://img.shields.io/conda/vn/conda-forge/deps.svg)](https://anaconda.org/conda-forge/deps)
+[![link](https://github.com/ESSS/deps/workflows/build/badge.svg)](https://github.com/ESSS/deps/actions)
+  
 Deps is a utility to execute commands on multiple projects. 
 
 It is meant to be used along with `conda devenv`: https://github.com/ESSS/conda-devenv, as such,
