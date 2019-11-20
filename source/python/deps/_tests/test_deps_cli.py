@@ -1027,3 +1027,20 @@ def test_empty_environment(cli_runner, tmpdir_factory, piped_shell_execute):
     matcher.fnmatch_lines(
         ["project_with_empty_environment (1/1)",]
     )
+
+
+def test_empty_includes(cli_runner, tmpdir_factory, piped_shell_execute):
+    test_project = tmpdir_factory.mktemp("test_empty_includes")
+    proj_dir = test_project.ensure("project_with_empty_includes", dir=True)
+    env_yml = proj_dir.join("environment.devenv.yml")
+    env_yml.write("includes:")
+
+    root = str(proj_dir)
+    command_args = ["-p", root, "echo", "test", "{name}"]
+    result = cli_runner.invoke(deps_cli.cli, command_args)
+    assert result.exit_code == 0, result.output
+
+    matcher = LineMatcher(result.output.splitlines())
+    matcher.fnmatch_lines(
+        ["project_with_empty_includes (1/1)",]
+    )
