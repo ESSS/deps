@@ -55,4 +55,4 @@ jobs:
         conda-devenv
     - name: Test
       run: |
-        activate deps && pre-commit run --all-files --show-diff-on-failure
+        source activate deps && pre-commit run --all-files --show-diff-on-failure
