@@ -16,11 +16,12 @@ from .version import __version__
 click.disable_unicode_literals_warning = True
 
 
-PROG_NAME = 'deps'
-PROG_MSG_PREFIX = PROG_NAME + ': '
+PROG_NAME = "deps"
+PROG_MSG_PREFIX = PROG_NAME + ": "
 MAX_LINE_LENGTH = 119
 
 _click_echo_color = None
+
 
 def echo_verbose_msg(*args, **kwargs):
     """
@@ -37,24 +38,26 @@ def echo_error(*args, **kwargs):
     For "error" messages.
     """
     click.secho(
-        PROG_MSG_PREFIX + 'error: ',
+        PROG_MSG_PREFIX + "error: ",
         nl=False,
         file=sys.stderr,
-        fg='red',
+        fg="red",
         bold=True,
         color=_click_echo_color,
     )
     kwargs.update(file=sys.stderr)
-    kwargs.update(fg='red')
+    kwargs.update(fg="red")
     kwargs.update(bold=True)
     kwargs.update(color=_click_echo_color)
     click.secho(*args, **kwargs)
+
 
 # ==================================================================================================
 # Customizations
 # ==================================================================================================
 
-FILE_WITH_DEPENDENCIES = 'environment.devenv.yml'
+FILE_WITH_DEPENDENCIES = "environment.devenv.yml"
+
 
 def memoize(fun):
 
@@ -70,6 +73,7 @@ def memoize(fun):
             return ret
 
     return wrapper
+
 
 @memoize
 def get_shallow_dependencies(base_directory, filename=None):
@@ -89,15 +93,15 @@ def get_shallow_dependencies(base_directory, filename=None):
         filename = FILE_WITH_DEPENDENCIES
 
     # NOTE: From [conda-devenv](https://conda-devenv.readthedocs.io/en/latest/usage.html#jinja2)
-    jinja_args = {'root': base_directory, 'os': os, 'sys': sys, 'platform': platform}
+    jinja_args = {"root": base_directory, "os": os, "sys": sys, "platform": platform}
 
-    with open(os.path.join(base_directory, filename), 'r') as f:
+    with open(os.path.join(base_directory, filename), "r") as f:
         yaml_contents = jinja2.Template(f.read()).render(**jinja_args)
 
     data = yaml.safe_load(yaml_contents) or {}
-    if 'includes' not in data:
+    if "includes" not in data:
         return []
-    includes = [os.path.abspath(p) for p in data['includes']]
+    includes = [os.path.abspath(p) for p in data["includes"]]
     includes = [(os.path.dirname(p), os.path.basename(p)) for p in includes]
     return includes
 
@@ -105,7 +109,8 @@ def get_shallow_dependencies(base_directory, filename=None):
 # ==================================================================================================
 # Common code
 # ==================================================================================================
-_Dep = namedtuple('Dep', 'name,abspath,deps,ignored,skipped')
+_Dep = namedtuple("Dep", "name,abspath,deps,ignored,skipped")
+
 
 class Dep(_Dep):
 
@@ -152,33 +157,36 @@ def pretty_print_dependency_tree(root_deps):
     """
     already_printed = set()
 
-    legend = textwrap.dedent('''\
+    legend = textwrap.dedent(
+        """\
         # - project_name: listed or target of command execution;
         # - (project_name): have already been printed in the tree;
         # - <project_name>: have been ignored (see `--ignore-project` option);
         # - {project_name}: have been skipped (see `--skipped-project` option);
-    ''')
+    """
+    )
     print(legend)
 
-    def print_formatted_dep(name, identation, name_template='{}'):
+    def print_formatted_dep(name, identation, name_template="{}"):
         print(identation + name_template.format(name))
 
-    def print_deps(dep_list, indentation_size=0, indentation_string='    '):
+    def print_deps(dep_list, indentation_size=0, indentation_string="    "):
         indentation = indentation_string * indentation_size
         next_indentation_size = indentation_size + 1
         for dep in dep_list:
             if dep.ignored:
-                print_formatted_dep(dep.name, indentation, '<{}>')
+                print_formatted_dep(dep.name, indentation, "<{}>")
                 continue
             if dep.abspath not in already_printed:
                 if dep.skipped:
-                    print_formatted_dep(dep.name, indentation, '{{{}}}')
+                    print_formatted_dep(dep.name, indentation, "{{{}}}")
                 else:
                     print_formatted_dep(dep.name, indentation)
                 already_printed.add(dep.abspath)
                 print_deps(dep.deps, next_indentation_size, indentation_string)
             else:
-                print_formatted_dep(dep.name, indentation, '({})')
+                print_formatted_dep(dep.name, indentation, "({})")
+
     print_deps(root_deps)
 
 
@@ -227,7 +235,9 @@ def find_directories(raw_directories):
     for raw_dir in raw_directories:
         directory = find_ancestor_dir_with(FILE_WITH_DEPENDENCIES, raw_dir)
         if directory is None:
-            msg = 'could not find "{}" for "{}".'.format(FILE_WITH_DEPENDENCIES, raw_dir)
+            msg = 'could not find "{}" for "{}".'.format(
+                FILE_WITH_DEPENDENCIES, raw_dir
+            )
             echo_error(msg)
             raise click.ClickException(msg)
         directories.append(directory)
@@ -235,7 +245,9 @@ def find_directories(raw_directories):
     return directories
 
 
-def obtain_all_dependecies_recursively(root_directories, ignored_projects, skipped_projects):
+def obtain_all_dependecies_recursively(
+    root_directories, ignored_projects, skipped_projects
+):
     """
     Creates a list with a `Dep` for each item in `root_directories` where each project is inspected
     recursively for its dependencies.
@@ -261,11 +273,14 @@ def obtain_all_dependecies_recursively(root_directories, ignored_projects, skipp
         """
         for dep_directory, dep_env_filename in directories:
             if dep_directory not in all_deps:
-                dep = create_new_dep_from_directory(dep_directory, ignored_projects, skipped_projects)
+                dep = create_new_dep_from_directory(
+                    dep_directory, ignored_projects, skipped_projects
+                )
                 all_deps[dep_directory] = dep
                 if not dep.ignored:
                     current_dep_directories = get_shallow_dependencies(
-                        dep_directory, dep_env_filename)
+                        dep_directory, dep_env_filename
+                    )
                     add_deps_from_directories(current_dep_directories, dep.deps)
             else:
                 dep = all_deps[dep_directory]
@@ -291,7 +306,7 @@ def obtain_repos(dep_list):
         :rtype: Dep
         :return: The repository for the given project. Conserve the `ignored` property.
         """
-        directory = find_ancestor_dir_with('.git', dep.abspath)
+        directory = find_ancestor_dir_with(".git", dep.abspath)
         directory = os.path.abspath(directory)
         repo_key = (directory, dep.ignored)
         if repo_key not in all_repos:
@@ -347,6 +362,7 @@ def obtain_repos(dep_list):
     convert_deps_to_repos(dep_list, root_repos, None)
     return root_repos
 
+
 @memoize
 def get_abs_path_to_dep_for_all_deps(dep):
     """
@@ -370,6 +386,7 @@ def get_abs_path_to_dep_for_all_deps(dep):
         # But `reversed` results in a more intuitive result IMO.
         other_deps.extend(reversed(next_dep.deps))
     return result
+
 
 def obtain_dependencies_ordered_for_execution(root_deps):
     """
@@ -438,8 +455,8 @@ def format_command(command, dep):
     :rtype: unicode | list(unicode)
     """
     format_dict = {
-        'name': dep.name,
-        'abs': dep.abspath,
+        "name": dep.name,
+        "abs": dep.abspath,
     }
 
     def _format(s, format_dict):
@@ -450,7 +467,7 @@ def format_command(command, dep):
         :rtype: unicode
         """
         for key, item in format_dict.items():
-            s = s.replace('{' + key + '}', item)
+            s = s.replace("{" + key + "}", item)
         return s
 
     if isinstance(command, (list, tuple)):
@@ -506,11 +523,12 @@ def execute_command_in_dependencies(
     error_messages = []
     initial = [x.name for x in dependencies]
     buffer_output = False
-    output_separator = '\n' + '=' * MAX_LINE_LENGTH
+    output_separator = "\n" + "=" * MAX_LINE_LENGTH
 
     if jobs > 1:
         buffer_output = True
         from concurrent.futures.thread import ThreadPoolExecutor
+
         executor = ThreadPoolExecutor(max_workers=jobs)
         previously_added_to_batch = set()
 
@@ -524,29 +542,37 @@ def execute_command_in_dependencies(
                 for i, dep in reversed(list(enumerate(dependencies))):
                     for depends_on in get_abs_path_to_dep_for_all_deps(dep).values():
                         if depends_on not in previously_added_to_batch:
-                            msg.append('{} still depending on: {}'.format(dep.name, depends_on.name))
+                            msg.append(
+                                "{} still depending on: {}".format(
+                                    dep.name, depends_on.name
+                                )
+                            )
                             break
                     else:
                         next_batch.append(dependencies.pop(i))
 
                 if not next_batch and dependencies:
                     raise AssertionError(
-                        'No batch calculated and dependencies still available.\n\n'
-                        'Remaining:\n%s\n\nFinished:\n%s\n\nAll:\n%s' % (
-                        '\n'.join(msg),
-                        '\n'.join(str(x.name) for x in previously_added_to_batch),
-                        '\n'.join(initial)
-                        ))
+                        "No batch calculated and dependencies still available.\n\n"
+                        "Remaining:\n%s\n\nFinished:\n%s\n\nAll:\n%s"
+                        % (
+                            "\n".join(msg),
+                            "\n".join(str(x.name) for x in previously_added_to_batch),
+                            "\n".join(initial),
+                        )
+                    )
 
             previously_added_to_batch.update(next_batch)
             return next_batch
+
     else:
         from ._synchronous_executor import SynchronousExecutor
+
         executor = SynchronousExecutor()
+
         def calculate_next_batch(dependencies):
             # The next is the first one in the list.
             return [dependencies.pop(0)]
-
 
     progress = 0
     total_progress = len(dependencies)
@@ -555,20 +581,26 @@ def execute_command_in_dependencies(
         progress += len(deps)
         dep_to_future = {}
         first = True
-        print_str = ', '.join(dep.name for dep in deps)
+        print_str = ", ".join(dep.name for dep in deps)
         for dep in deps:
             if len(deps) == 1 or first:
-                click.secho(output_separator, fg='black', bold=True, color=_click_echo_color)
+                click.secho(
+                    output_separator, fg="black", bold=True, color=_click_echo_color
+                )
 
             # Checks before execution.
             if dep.ignored:
-                click.secho(dep.name, fg='blue', bold=True, color=_click_echo_color, nl=False)
-                click.secho(' ignored', fg='yellow', color=_click_echo_color)
+                click.secho(
+                    dep.name, fg="blue", bold=True, color=_click_echo_color, nl=False
+                )
+                click.secho(" ignored", fg="yellow", color=_click_echo_color)
                 continue
 
             if dep.skipped:
-                click.secho(dep.name, fg='blue', bold=True, color=_click_echo_color, nl=False)
-                click.secho(' skipped', fg='magenta', color=_click_echo_color)
+                click.secho(
+                    dep.name, fg="blue", bold=True, color=_click_echo_color, nl=False
+                )
+                click.secho(" skipped", fg="magenta", color=_click_echo_color)
                 continue
 
             if not required_files_filter(dep, quiet=False):
@@ -581,18 +613,20 @@ def execute_command_in_dependencies(
                 working_dir = dep.abspath
 
             if len(deps) == 1 or first:
-                msg = '%s (%d/%d)' % (print_str, progress, total_progress)
-                click.secho(msg, fg='blue', bold=True, color=_click_echo_color)
+                msg = "%s (%d/%d)" % (print_str, progress, total_progress)
+                click.secho(msg, fg="blue", bold=True, color=_click_echo_color)
             if verbose or dry_run:
-                command_to_print = ' '.join(
-                    arg.replace(' ', '\\ ') for arg in formatted_command)
-                echo_verbose_msg('executing: ' + command_to_print)
+                command_to_print = " ".join(
+                    arg.replace(" ", "\\ ") for arg in formatted_command
+                )
+                echo_verbose_msg("executing: " + command_to_print)
                 if working_dir:
-                    echo_verbose_msg('from:      ' + working_dir)
+                    echo_verbose_msg("from:      " + working_dir)
 
             if not dry_run:
                 dep_to_future[dep] = executor.submit(
-                    execute, formatted_command, working_dir, buffer_output)
+                    execute, formatted_command, working_dir, buffer_output
+                )
 
             first = False
 
@@ -602,37 +636,43 @@ def execute_command_in_dependencies(
             except Exception as e:
                 # Usually should only fail on CancelledException
                 returncode = 1
-                stdout = ''
+                stdout = ""
                 stderr = str(e)
                 command_time = 0.0
 
             exit_codes.append(returncode)
 
-            click.secho('Finished: {} in {:.2f}s'.format(dep.name, command_time), fg='white', bold=False, color=_click_echo_color)
+            click.secho(
+                "Finished: {} in {:.2f}s".format(dep.name, command_time),
+                fg="white",
+                bold=False,
+                color=_click_echo_color,
+            )
             if buffer_output:
                 if stdout:
-                    click.secho('=== STDOUT ===')
+                    click.secho("=== STDOUT ===")
 
                     if type(stdout) is not str:
-                        stdout = stdout.decode('utf-8', errors='replace')
+                        stdout = stdout.decode("utf-8", errors="replace")
 
                     click.secho(stdout)
 
                 if stderr:
-                    click.secho('=== STDERR ===', fg='red', bold=True)
+                    click.secho("=== STDERR ===", fg="red", bold=True)
                     if type(stderr) is not str:
-                        stderr = stderr.decode('utf-8', errors='replace')
-                    click.secho(stderr, fg='red', bold=True)
-
+                        stderr = stderr.decode("utf-8", errors="replace")
+                    click.secho(stderr, fg="red", bold=True)
 
             if verbose:
                 if jobs > 1:
-                    echo_verbose_msg('return code for project {}: {}'.format(dep.name, returncode))
+                    echo_verbose_msg(
+                        "return code for project {}: {}".format(dep.name, returncode)
+                    )
                 else:
-                    echo_verbose_msg('return code: {}'.format(returncode))
+                    echo_verbose_msg("return code: {}".format(returncode))
 
             if returncode != 0:
-                error_msg = 'Command failed (project: {})'.format(dep.name)
+                error_msg = "Command failed (project: {})".format(dep.name)
                 error_messages.append(error_msg)
                 echo_error(error_msg)
 
@@ -640,7 +680,6 @@ def execute_command_in_dependencies(
                     # Cancel what can be cancelled in case we had a failure.
                     for f in dep_to_future.values():
                         f.cancel()
-
 
         if not continue_on_failure:
             keep_on_going = True
@@ -657,7 +696,7 @@ def execute_command_in_dependencies(
     if continue_on_failure or jobs > 1:
         if error_messages:
             echo_error(output_separator)
-            echo_error('A list of all errors follow:')
+            echo_error("A list of all errors follow:")
         for msg in error_messages:
             echo_error(msg)
 
@@ -665,7 +704,7 @@ def execute_command_in_dependencies(
 
 
 def execute(formatted_command, working_dir, buffer_output=False):
-    '''
+    """
     Actually executes some command in the given working directory.
 
     :param list(unicode) formatted_command:
@@ -680,79 +719,110 @@ def execute(formatted_command, working_dir, buffer_output=False):
 
     :return tuple(int, unicode, unicode, float):
         A tuple with (returncode, stdout, stderr, time to execute command).
-    '''
-    if not sys.platform.startswith('win'):
+    """
+    if not sys.platform.startswith("win"):
         import pipes
+
         for index, item in enumerate(formatted_command):
             formatted_command[index] = pipes.quote(item)
-        formatted_command = ' '.join(formatted_command)
+        formatted_command = " ".join(formatted_command)
 
     if working_dir is None:
         cwd = None
     else:
         cwd = os.path.expanduser(working_dir)
         if not os.path.exists(cwd):
-            sys.stderr.write('Error: {} does not exist.\n'.format(cwd))
-            return 1, '', 'Error: {} does not exist.\n'.format(cwd), 0
+            sys.stderr.write("Error: {} does not exist.\n".format(cwd))
+            return 1, "", "Error: {} does not exist.\n".format(cwd), 0
 
-    process, stdout, stderr, command_time = shell_execute(formatted_command, cwd, buffer_output)
+    process, stdout, stderr, command_time = shell_execute(
+        formatted_command, cwd, buffer_output
+    )
     return process.returncode, stdout, stderr, command_time
 
 
 @click.command(name=PROG_NAME)
-@click.argument('command', nargs=-1)
+@click.argument("command", nargs=-1)
 @click.version_option(__version__)
 @click.option(
-    '--project', '-p', default='.', type=click.Path(), multiple=True,
-    help="Project to find dependencies of (can be used multiple times).")
+    "--project",
+    "-p",
+    default=".",
+    type=click.Path(),
+    multiple=True,
+    help="Project to find dependencies of (can be used multiple times).",
+)
 @click.option(
-    '--pretty-print', '-pp', is_flag=True,
-    help='Pretty print dependencies in a tree.')
+    "--pretty-print", "-pp", is_flag=True, help="Pretty print dependencies in a tree."
+)
 @click.option(
-    '--require-file', '-f', multiple=True,
-    help='Only run the command if the file exists (relative to dependency working directory).')
+    "--require-file",
+    "-f",
+    multiple=True,
+    help="Only run the command if the file exists (relative to dependency working directory).",
+)
+@click.option("--here", is_flag=True, help="Do not change working dir.")
 @click.option(
-    '--here', is_flag=True,
-    help='Do not change working dir.')
+    "--dry-run",
+    "-n",
+    is_flag=True,
+    help="Do not execute, only print what will be executed.",
+)
+@click.option("--verbose", "-v", is_flag=True, help="Print more information.")
 @click.option(
-    '--dry-run', '-n', is_flag=True,
-    help='Do not execute, only print what will be executed.')
+    "--continue-on-failure",
+    is_flag=True,
+    help="Continue processing commands even when one fail (if some command fail the return value"
+    " will be non zero).",
+)
 @click.option(
-    '--verbose', '-v', is_flag=True,
-    help='Print more information.')
+    "--ignore-project",
+    "-i",
+    type=click.Path(),
+    multiple=True,
+    envvar="DEPS_IGNORE_PROJECT",
+    help="Project name to ignore when looking for dependencies and will not recurse"
+    " into those projects. Instead of passing this option an environment variable with the"
+    " name DEPS_IGNORE_PROJECT can be used (can be used multiple times).",
+)
 @click.option(
-    '--continue-on-failure', is_flag=True,
-    help='Continue processing commands even when one fail (if some command fail the return value'
-         ' will be non zero).')
+    "--skip-project",
+    "-s",
+    type=click.Path(),
+    multiple=True,
+    envvar="DEPS_SKIP_PROJECT",
+    help="Project name to skip execution but still look for its dependencies. Instead of passing this option an "
+    "environment variable with the name DEPS_SKIP_PROJECT can be used (can be used multiple times).",
+)
 @click.option(
-    '--ignore-project', '-i', type=click.Path(), multiple=True, envvar='DEPS_IGNORE_PROJECT',
-    help='Project name to ignore when looking for dependencies and will not recurse'
-         ' into those projects. Instead of passing this option an environment variable with the'
-         ' name DEPS_IGNORE_PROJECT can be used (can be used multiple times).')
+    "--force-color/--no-force-color",
+    is_flag=True,
+    envvar="DEPS_FORCE_COLOR",
+    help="Always use colors on output (by default it is detected if running on a terminal). If file"
+    " redirection is used ANSI escape sequences are output even on windows. Instead of passing"
+    " this option an environment variable with the name DEPS_FORCE_COLOR can be used.",
+)
 @click.option(
-    '--skip-project', '-s', type=click.Path(), multiple=True, envvar='DEPS_SKIP_PROJECT',
-    help='Project name to skip execution but still look for its dependencies. Instead of passing this option an '
-         'environment variable with the name DEPS_SKIP_PROJECT can be used (can be used multiple times).')
+    "--repos",
+    is_flag=True,
+    help="Instead of projects the enumeration procedure will use the containing repositories"
+    " instead of projects them selves",
+)
 @click.option(
-    '--force-color/--no-force-color', is_flag=True, envvar='DEPS_FORCE_COLOR',
-    help='Always use colors on output (by default it is detected if running on a terminal). If file'
-         ' redirection is used ANSI escape sequences are output even on windows. Instead of passing'
-         ' this option an environment variable with the name DEPS_FORCE_COLOR can be used.')
+    "--jobs", "-j", default=1, help="Run commands in parallel using multiple processes"
+)
 @click.option(
-    '--repos', is_flag=True,
-    help='Instead of projects the enumeration procedure will use the containing repositories'
-         ' instead of projects them selves')
+    "--jobs-unordered",
+    is_flag=True,
+    help="Will run jobs without any specific order (useful if dependencies are not important and "
+    "jobs > 1 to run more jobs concurrently).",
+)
 @click.option(
-    '--jobs', '-j', default=1,
-    help='Run commands in parallel using multiple processes')
-@click.option(
-    '--jobs-unordered', is_flag=True,
-    help='Will run jobs without any specific order (useful if dependencies are not important and '
-        'jobs > 1 to run more jobs concurrently).')
-@click.option(
-    '--deps-reversed', is_flag=True,
-    help='Will run with a reversed dependency (only used if --jobs=1). Useful to identify where the '
-        'order is important.')
+    "--deps-reversed",
+    is_flag=True,
+    help="Will run with a reversed dependency (only used if --jobs=1). Useful to identify where the "
+    "order is important.",
+)
 def cli(
     command,
     project,
@@ -817,13 +887,14 @@ def cli(
       This is equivalent to pass "--ignore-project=old_project --ignore-project=fuzzy_project"
     """
     import time
+
     initial_time = time.time()
     global _click_echo_color
     original_auto_wrap_for_ansi = click.utils.auto_wrap_for_ansi
     try:
         if force_color:
             _click_echo_color = True
-            if sys.platform == 'win32':
+            if sys.platform == "win32":
                 # Click always wrap the output stream on windows calling
                 # `click.utils.auto_wrap_for_ansi`, setting to `None` causes ansi escape codes to
                 # be output.
@@ -831,7 +902,9 @@ def cli(
 
         directories = find_directories(project)
 
-        root_deps = obtain_all_dependecies_recursively(directories, ignore_project, skip_project)
+        root_deps = obtain_all_dependecies_recursively(
+            directories, ignore_project, skip_project
+        )
         if repos:
             root_deps = obtain_repos(root_deps)
 
@@ -848,12 +921,16 @@ def cli(
             :return: `True` if the necessary files/folders are present, `False` otherwise.
             """
             for f in require_file:
-                file_to_check = os.path.join(dependency.abspath, format_command(f, dependency))
-                if not os.path.isfile(file_to_check) and not os.path.isdir(file_to_check):
+                file_to_check = os.path.join(
+                    dependency.abspath, format_command(f, dependency)
+                )
+                if not os.path.isfile(file_to_check) and not os.path.isdir(
+                    file_to_check
+                ):
                     if not quiet:
                         msg = '{}: skipping since "{}" does not exist'
                         msg = msg.format(dependency.name, file_to_check)
-                        click.secho(msg, fg='cyan', color=_click_echo_color)
+                        click.secho(msg, fg="cyan", color=_click_echo_color)
                     return False
             return True
 
@@ -864,10 +941,13 @@ def cli(
 
         if not command:
             deps_to_output = [
-                dep.name for dep in deps_in_order
-                if not dep.ignored and not dep.skipped and required_files_filter(dep, quiet=True)
+                dep.name
+                for dep in deps_in_order
+                if not dep.ignored
+                and not dep.skipped
+                and required_files_filter(dep, quiet=True)
             ]
-            print('\n'.join(deps_to_output))
+            print("\n".join(deps_to_output))
             return 0
 
         # Execution.
@@ -883,7 +963,7 @@ def cli(
             jobs_unordered=jobs_unordered,
         )
 
-        click.secho('Total time: {:.2f}s'.format(time.time() - initial_time))
+        click.secho("Total time: {:.2f}s".format(time.time() - initial_time))
 
         execution_return = sorted(execution_return, key=abs)
         sys.exit(execution_return[-1] if execution_return else 1)
@@ -908,12 +988,14 @@ def shell_execute(command, cwd, buffer_output=False):
         Return tuple with the process object used to run the command, stdout, stderr, time to execute.
     """
     import time
+
     curtime = time.time()
     # Note: could use something like this for more robustness:
     # http://stackoverflow.com/questions/13243807/popen-waiting-for-child-process-even-when-the-immediate-child-has-terminated/13256908#13256908
     if buffer_output:
         process = subprocess.Popen(
-            command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, cwd=cwd)
+            command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, cwd=cwd
+        )
     else:
         process = subprocess.Popen(command, shell=True, cwd=cwd)
     stdout, stderr = process.communicate()
@@ -924,8 +1006,8 @@ def main_func():
     """
     A wrapper to call the click command with the desired parameters.
     """
-    return cli(auto_envvar_prefix='DEPS')
+    return cli(auto_envvar_prefix="DEPS")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main_func())

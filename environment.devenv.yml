@@ -1,14 +1,15 @@
 name: deps
 
 dependencies:
-  - python >=3.6
   - click
   - colorama
+  - future
+  - jinja2
+  - pre-commit
   - pytest >=5
   - pytest-mock
-  - jinja2
+  - python >=3.6,<3.8
   - pyyaml
-  - future
 
 environment:
   PYTHONPATH:
