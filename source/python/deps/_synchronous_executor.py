@@ -1,8 +1,7 @@
-'''
+"""
 Helper module to create a synchronous executor to be used replacing the ThreadPoolExecutor
 when running synchronously.
-'''
-
+"""
 
 
 class Future:
@@ -41,6 +40,7 @@ class SynchronousExecutor:
     """
     Synchronous executor: submit() blocks until it gets the result.
     """
+
     def submit(self, callback, *args):
         return Future(callback, args)
 

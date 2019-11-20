@@ -20,13 +20,18 @@ def piped_shell_execute(mocker):
         # This version always makes the pipe regardless of the buffer_output value and always
         # redirects everything for stdout.
         process = subprocess.Popen(
-            command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True, cwd=cwd)
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            shell=True,
+            cwd=cwd,
+        )
         stdout, stderr = process.communicate()
         stdout = stdout.decode()
         click.secho(stdout)
         return process, stdout, stderr, 0
+
     shell_execute = mocker.patch(
-        'deps.deps_cli.shell_execute',
-        new=_piped_shell_execute,
+        "deps.deps_cli.shell_execute", new=_piped_shell_execute,
     )
     return shell_execute
