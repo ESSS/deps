@@ -25,11 +25,15 @@ with full-paralelization, without respecting any particular order.
 Usage
 =====
 
-Program to list dependencies of a project, or to execute a command for each dependency:
+Program to list development dependencies of `conda-devenv` projects, or to execute a command for each dependency:
 
     deps [OPTIONS] [COMMAND]...
 
-To list dependency projects, one per line (if "-p directory" is omitted, it will use the current, or will find the first ancestor directory containing an `environment.devenv.yml` file):
+To list project dependencies of the project in the current directory, one per line:
+
+    deps
+
+It is possible to pass `-p directory` to find the first ancestor of `directory` containing an `environment.devenv.yml` file:
 
     deps -p mylib10 -p myotherlib20
 
