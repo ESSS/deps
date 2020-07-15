@@ -45,7 +45,7 @@ To use deps to execute a command for each dependency (will spawn a new shell for
 
     deps [parameters] <command>
 
-To prevent deps to process any option or flags passed to command a "--" can be used
+To prevent deps to process any option or flags passed to command a "--" can be used:
 
     deps [parameters] -- <command> --with --flags
 
@@ -60,13 +60,8 @@ If the option --require-file is used dependencies not having a file named as thi
 
 When passing parameters that can be used multiple times through environment variable use the operational system path separator (windows=";", linux=":") to separate multiple entries:
 
-* Windows
-
-      set DEPS_IGNORE_PROJECT=old_project;fuzzy_project
-
-* Linux
-
-      export DEPS_IGNORE_PROJECT=old_project:fuzzy_project
+* Windows: `set DEPS_IGNORE_PROJECT=old_project;fuzzy_project`
+* Linux: `export DEPS_IGNORE_PROJECT=old_project:fuzzy_project`
 
 This is equivalent to pass `--ignore-project=old_project --ignore-project=fuzzy_project`.
 
@@ -81,11 +76,11 @@ Options Description:
     Project to find dependencies of (can be used multiple times).
 
   * `-pp, --pretty-print`
-  
+
     Pretty print dependencies in a tree.
 
   * `-f, --require-file TEXT`
-  
+
     Only run the command if the file exists (relative to dependency working directory).
 
   * `--here`
