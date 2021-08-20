@@ -747,7 +747,7 @@ def execute(formatted_command, working_dir, buffer_output=False):
 @click.option(
     "--project",
     "-p",
-    default=".",
+    default=["."],
     type=click.Path(),
     multiple=True,
     help="Project to find dependencies of (can be used multiple times).",
