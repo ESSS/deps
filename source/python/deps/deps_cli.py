@@ -523,7 +523,12 @@ def execute_command_in_dependencies(
     error_messages = []
     initial = [x.name for x in dependencies]
     buffer_output = False
-    output_separator = "\n" + "=" * MAX_LINE_LENGTH
+    if "GITHUB_WORKSPACE" in os.environ:
+        prefix = "::group::"
+        output_separator = "\n"
+    else:
+        prefix = ""
+        output_separator = "\n" + "=" * MAX_LINE_LENGTH
 
     if jobs > 1:
         buffer_output = True
@@ -591,14 +596,22 @@ def execute_command_in_dependencies(
             # Checks before execution.
             if dep.ignored:
                 click.secho(
-                    dep.name, fg="blue", bold=True, color=_click_echo_color, nl=False
+                    prefix + dep.name,
+                    fg="blue",
+                    bold=True,
+                    color=_click_echo_color,
+                    nl=False,
                 )
                 click.secho(" ignored", fg="yellow", color=_click_echo_color)
                 continue
 
             if dep.skipped:
                 click.secho(
-                    dep.name, fg="blue", bold=True, color=_click_echo_color, nl=False
+                    prefix + dep.name,
+                    fg="blue",
+                    bold=True,
+                    color=_click_echo_color,
+                    nl=False,
                 )
                 click.secho(" skipped", fg="magenta", color=_click_echo_color)
                 continue
@@ -614,7 +627,7 @@ def execute_command_in_dependencies(
 
             if len(deps) == 1 or first:
                 msg = "%s (%d/%d)" % (print_str, progress, total_progress)
-                click.secho(msg, fg="blue", bold=True, color=_click_echo_color)
+                click.secho(prefix + msg, fg="blue", bold=True, color=_click_echo_color)
             if verbose or dry_run:
                 command_to_print = " ".join(
                     arg.replace(" ", "\\ ") for arg in formatted_command

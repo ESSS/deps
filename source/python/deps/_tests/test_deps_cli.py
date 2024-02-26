@@ -10,6 +10,15 @@ from _pytest.pytester import LineMatcher
 from deps import deps_cli
 
 
+@pytest.fixture(autouse=True)
+def cleanup_env(monkeypatch):
+    """
+    Remove the GITHUB_WORKSPACE from the testing environment, otherwise the presence of this
+    variable will cause all section outputs to contain ::group:: when running inside GH actions itself.
+    """
+    monkeypatch.delenv("GITHUB_WORKSPACE", raising=False)
+
+
 @pytest.fixture(scope="session")
 def project_tree(tmpdir_factory):
     """
@@ -182,12 +191,18 @@ def test_cant_find_root(cli_runner, project_tree, piped_shell_execute):
     )
 
 
-def test_execution_on_project_dir(cli_runner, project_tree, monkeypatch):
+@pytest.mark.parametrize("on_github", [True, False])
+def test_execution_on_project_dir(cli_runner, project_tree, monkeypatch, on_github):
     """
     :type cli_runner: click.testing.CliRunner
     :type project_tree: py.path.local
     :type monkeypatch: _pytest.monkeypatch
     """
+    if on_github:
+        monkeypatch.setenv("GITHUB_WORKSPACE", "some/path")
+        expected_prefix = "::group::"
+    else:
+        expected_prefix = ""
     monkeypatch.chdir(project_tree.join("root_b"))
     command_args = ["-v", "--", "python", "-c", '"name: {name}"']
     result = cli_runner.invoke(deps_cli.cli, command_args)
@@ -195,19 +210,19 @@ def test_execution_on_project_dir(cli_runner, project_tree, monkeypatch):
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines(
         [
-            "dep_z (1/4)",
+            f"{expected_prefix}dep_z (1/4)",
             'deps: executing: python -c "name:\\ dep_z"',
             "deps: from:      *[\\/]test_projects0[\\/]dep_z",
             "deps: return code: 0",
-            "dep_b.1.1 (2/4)",
+            f"{expected_prefix}dep_b.1.1 (2/4)",
             'deps: executing: python -c "name:\\ dep_b.1.1"',
             "deps: from:      *[\\/]test_projects0[\\/]bs[\\/]dep_b.1.1",
             "deps: return code: 0",
-            "dep_b.1 (3/4)",
+            f"{expected_prefix}dep_b.1 (3/4)",
             'deps: executing: python -c "name:\\ dep_b.1"',
             "deps: from:      *[\\/]test_projects0[\\/]bs[\\/]dep_b.1",
             "deps: return code: 0",
-            "root_b (4/4)",
+            f"{expected_prefix}root_b (4/4)",
             'deps: executing: python -c "name:\\ root_b"',
             "deps: from:      *[\\/]test_projects0[\\/]root_b",
             "deps: return code: 0",
