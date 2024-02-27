@@ -1,3 +1,13 @@
+1.3.0 (UNRELEASED)
+------------------
+
+* When running under GitHub actions, add the ``::group::`` prefix to each section header so they are grouped in the GitHub actions logs.
+
+  See `Grouping log lines <https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#grouping-log-lines>`__ in the GitHub documentation.
+
+* Dropped support for Python 3.6, 3.7, 3.8, and 3.9.
+
+
 1.2.0 (2021-08-20)
 ------------------
 
