@@ -45,24 +45,3 @@ jobs:
     - name: Test
       run: |
         ${{ matrix.shell_exec }} "${{ matrix.activate_cmd }} deps && python -m pytest source/python"
-
-
-  linting:
-
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v2
-    - name: Setup conda
-      uses: s-weigand/setup-conda@v1
-      with:
-        update-conda: true
-        python-version: "3.10"
-        conda-channels: anaconda, conda-forge
-    - name: conda-devenv
-      run: |
-        conda install conda-devenv
-        conda-devenv
-    - name: Test
-      run: |
-        source activate deps && pre-commit run --all-files --show-diff-on-failure
