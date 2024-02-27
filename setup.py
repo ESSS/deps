@@ -28,6 +28,10 @@ setup(
     license="MIT",
     packages=find_packages("source/python"),
     package_dir={"": "source/python"},
-    entry_points={"console_scripts": ["deps = deps.deps_cli:main_func",],},
+    entry_points={
+        "console_scripts": [
+            "deps = deps.deps_cli:main_func",
+        ],
+    },
     install_requires=install_requires,
 )

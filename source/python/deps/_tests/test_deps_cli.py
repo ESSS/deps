@@ -334,10 +334,26 @@ def test_script_return_code(cli_runner, project_tree, piped_shell_execute):
     )
 
 
-@pytest.mark.parametrize("force", [True, False,])
-@pytest.mark.parametrize("use_env_var", [True, False,])
+@pytest.mark.parametrize(
+    "force",
+    [
+        True,
+        False,
+    ],
+)
+@pytest.mark.parametrize(
+    "use_env_var",
+    [
+        True,
+        False,
+    ],
+)
 def test_force_color(
-    use_env_var, force, cli_runner, project_tree, piped_shell_execute,
+    use_env_var,
+    force,
+    cli_runner,
+    project_tree,
+    piped_shell_execute,
 ):
     """
     :type use_env_var: bool
@@ -370,9 +386,18 @@ def test_force_color(
     assert (ansi_csi_repr in output_repr) == force
 
 
-@pytest.mark.parametrize("use_env_var", [True, False,])
+@pytest.mark.parametrize(
+    "use_env_var",
+    [
+        True,
+        False,
+    ],
+)
 def test_ignore_projects(
-    use_env_var, cli_runner, project_tree, piped_shell_execute,
+    use_env_var,
+    cli_runner,
+    project_tree,
+    piped_shell_execute,
 ):
     """
     :type use_env_var: bool
@@ -423,9 +448,18 @@ def test_ignore_projects(
     )
 
 
-@pytest.mark.parametrize("use_env_var", [True, False,])
+@pytest.mark.parametrize(
+    "use_env_var",
+    [
+        True,
+        False,
+    ],
+)
 def test_skip_projects(
-    use_env_var, cli_runner, project_tree, piped_shell_execute,
+    use_env_var,
+    cli_runner,
+    project_tree,
+    piped_shell_execute,
 ):
     """
     :type use_env_var: bool
@@ -482,9 +516,18 @@ def test_skip_projects(
     )
 
 
-@pytest.mark.parametrize("use_env_var", [True, False,])
+@pytest.mark.parametrize(
+    "use_env_var",
+    [
+        True,
+        False,
+    ],
+)
 def test_conflict_ignore_skip_projects(
-    use_env_var, cli_runner, project_tree, piped_shell_execute,
+    use_env_var,
+    cli_runner,
+    project_tree,
+    piped_shell_execute,
 ):
     """
     :type use_env_var: bool
@@ -832,12 +875,18 @@ def test_list_repos_precedence(mode, cli_runner, project_tree, piped_shell_execu
     matcher = LineMatcher(result.output.splitlines())
     if mode == "skipped":
         matcher.fnmatch_lines(
-            ["*[\\/]test_projects0[\\/]root_d", "    {*[\\/]test_projects0[\\/]d}",]
+            [
+                "*[\\/]test_projects0[\\/]root_d",
+                "    {*[\\/]test_projects0[\\/]d}",
+            ]
         )
     else:
         assert mode == "normal"
         matcher.fnmatch_lines(
-            ["*[\\/]test_projects0[\\/]root_d", "    *[\\/]test_projects0[\\/]d",]
+            [
+                "*[\\/]test_projects0[\\/]root_d",
+                "    *[\\/]test_projects0[\\/]d",
+            ]
         )
 
 
@@ -1025,7 +1074,9 @@ def test_empty_environment(cli_runner, tmpdir_factory, piped_shell_execute):
 
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines(
-        ["project_with_empty_environment (1/1)",]
+        [
+            "project_with_empty_environment (1/1)",
+        ]
     )
 
 
@@ -1042,5 +1093,7 @@ def test_empty_includes(cli_runner, tmpdir_factory, piped_shell_execute):
 
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines(
-        ["project_with_empty_includes (1/1)",]
+        [
+            "project_with_empty_includes (1/1)",
+        ]
     )
