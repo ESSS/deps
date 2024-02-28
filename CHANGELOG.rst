@@ -1,4 +1,4 @@
-1.3.0 (UNRELEASED)
+1.3.0 (2024-02-28)
 ------------------
 
 * When running under GitHub actions, add the ``::group::`` prefix to each section header so they are grouped in the GitHub actions logs.
