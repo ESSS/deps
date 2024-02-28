@@ -14,10 +14,6 @@ install_requires = [
     "pyyaml",
 ]
 
-if sys.version_info[0] <= 2:
-    # Backport of concurrent.futures
-    install_requires.append("futures")
-
 setup(
     name="deps",
     version=version,
