@@ -32,6 +32,7 @@ def piped_shell_execute(mocker):
         return process, stdout, stderr, 0
 
     shell_execute = mocker.patch(
-        "deps.deps_cli.shell_execute", new=_piped_shell_execute,
+        "deps.deps_cli.shell_execute",
+        new=_piped_shell_execute,
     )
     return shell_execute

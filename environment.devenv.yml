@@ -8,7 +8,7 @@ dependencies:
   - pre-commit
   - pytest >=5
   - pytest-mock
-  - python >=3.6,<3.8
+  - python >=3.10,<3.11
   - pyyaml
 
 environment:

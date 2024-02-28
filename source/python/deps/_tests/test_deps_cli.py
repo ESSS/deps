@@ -10,6 +10,15 @@ from _pytest.pytester import LineMatcher
 from deps import deps_cli
 
 
+@pytest.fixture(autouse=True)
+def cleanup_env(monkeypatch):
+    """
+    Remove the GITHUB_WORKSPACE from the testing environment, otherwise the presence of this
+    variable will cause all section outputs to contain ::group:: when running inside GH actions itself.
+    """
+    monkeypatch.delenv("GITHUB_WORKSPACE", raising=False)
+
+
 @pytest.fixture(scope="session")
 def project_tree(tmpdir_factory):
     """
@@ -182,12 +191,18 @@ def test_cant_find_root(cli_runner, project_tree, piped_shell_execute):
     )
 
 
-def test_execution_on_project_dir(cli_runner, project_tree, monkeypatch):
+@pytest.mark.parametrize("on_github", [True, False])
+def test_execution_on_project_dir(cli_runner, project_tree, monkeypatch, on_github):
     """
     :type cli_runner: click.testing.CliRunner
     :type project_tree: py.path.local
     :type monkeypatch: _pytest.monkeypatch
     """
+    if on_github:
+        monkeypatch.setenv("GITHUB_WORKSPACE", "some/path")
+        expected_prefix = "::group::"
+    else:
+        expected_prefix = ""
     monkeypatch.chdir(project_tree.join("root_b"))
     command_args = ["-v", "--", "python", "-c", '"name: {name}"']
     result = cli_runner.invoke(deps_cli.cli, command_args)
@@ -195,19 +210,19 @@ def test_execution_on_project_dir(cli_runner, project_tree, monkeypatch):
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines(
         [
-            "dep_z (1/4)",
+            f"{expected_prefix}dep_z (1/4)",
             'deps: executing: python -c "name:\\ dep_z"',
             "deps: from:      *[\\/]test_projects0[\\/]dep_z",
             "deps: return code: 0",
-            "dep_b.1.1 (2/4)",
+            f"{expected_prefix}dep_b.1.1 (2/4)",
             'deps: executing: python -c "name:\\ dep_b.1.1"',
             "deps: from:      *[\\/]test_projects0[\\/]bs[\\/]dep_b.1.1",
             "deps: return code: 0",
-            "dep_b.1 (3/4)",
+            f"{expected_prefix}dep_b.1 (3/4)",
             'deps: executing: python -c "name:\\ dep_b.1"',
             "deps: from:      *[\\/]test_projects0[\\/]bs[\\/]dep_b.1",
             "deps: return code: 0",
-            "root_b (4/4)",
+            f"{expected_prefix}root_b (4/4)",
             'deps: executing: python -c "name:\\ root_b"',
             "deps: from:      *[\\/]test_projects0[\\/]root_b",
             "deps: return code: 0",
@@ -334,10 +349,26 @@ def test_script_return_code(cli_runner, project_tree, piped_shell_execute):
     )
 
 
-@pytest.mark.parametrize("force", [True, False,])
-@pytest.mark.parametrize("use_env_var", [True, False,])
+@pytest.mark.parametrize(
+    "force",
+    [
+        True,
+        False,
+    ],
+)
+@pytest.mark.parametrize(
+    "use_env_var",
+    [
+        True,
+        False,
+    ],
+)
 def test_force_color(
-    use_env_var, force, cli_runner, project_tree, piped_shell_execute,
+    use_env_var,
+    force,
+    cli_runner,
+    project_tree,
+    piped_shell_execute,
 ):
     """
     :type use_env_var: bool
@@ -370,9 +401,18 @@ def test_force_color(
     assert (ansi_csi_repr in output_repr) == force
 
 
-@pytest.mark.parametrize("use_env_var", [True, False,])
+@pytest.mark.parametrize(
+    "use_env_var",
+    [
+        True,
+        False,
+    ],
+)
 def test_ignore_projects(
-    use_env_var, cli_runner, project_tree, piped_shell_execute,
+    use_env_var,
+    cli_runner,
+    project_tree,
+    piped_shell_execute,
 ):
     """
     :type use_env_var: bool
@@ -423,9 +463,18 @@ def test_ignore_projects(
     )
 
 
-@pytest.mark.parametrize("use_env_var", [True, False,])
+@pytest.mark.parametrize(
+    "use_env_var",
+    [
+        True,
+        False,
+    ],
+)
 def test_skip_projects(
-    use_env_var, cli_runner, project_tree, piped_shell_execute,
+    use_env_var,
+    cli_runner,
+    project_tree,
+    piped_shell_execute,
 ):
     """
     :type use_env_var: bool
@@ -482,9 +531,18 @@ def test_skip_projects(
     )
 
 
-@pytest.mark.parametrize("use_env_var", [True, False,])
+@pytest.mark.parametrize(
+    "use_env_var",
+    [
+        True,
+        False,
+    ],
+)
 def test_conflict_ignore_skip_projects(
-    use_env_var, cli_runner, project_tree, piped_shell_execute,
+    use_env_var,
+    cli_runner,
+    project_tree,
+    piped_shell_execute,
 ):
     """
     :type use_env_var: bool
@@ -832,12 +890,18 @@ def test_list_repos_precedence(mode, cli_runner, project_tree, piped_shell_execu
     matcher = LineMatcher(result.output.splitlines())
     if mode == "skipped":
         matcher.fnmatch_lines(
-            ["*[\\/]test_projects0[\\/]root_d", "    {*[\\/]test_projects0[\\/]d}",]
+            [
+                "*[\\/]test_projects0[\\/]root_d",
+                "    {*[\\/]test_projects0[\\/]d}",
+            ]
         )
     else:
         assert mode == "normal"
         matcher.fnmatch_lines(
-            ["*[\\/]test_projects0[\\/]root_d", "    *[\\/]test_projects0[\\/]d",]
+            [
+                "*[\\/]test_projects0[\\/]root_d",
+                "    *[\\/]test_projects0[\\/]d",
+            ]
         )
 
 
@@ -1025,7 +1089,9 @@ def test_empty_environment(cli_runner, tmpdir_factory, piped_shell_execute):
 
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines(
-        ["project_with_empty_environment (1/1)",]
+        [
+            "project_with_empty_environment (1/1)",
+        ]
     )
 
 
@@ -1042,5 +1108,7 @@ def test_empty_includes(cli_runner, tmpdir_factory, piped_shell_execute):
 
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines(
-        ["project_with_empty_includes (1/1)",]
+        [
+            "project_with_empty_includes (1/1)",
+        ]
     )
