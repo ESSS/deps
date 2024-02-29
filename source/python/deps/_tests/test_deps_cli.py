@@ -228,6 +228,8 @@ def test_execution_on_project_dir(cli_runner, project_tree, monkeypatch, on_gith
             "deps: return code: 0",
         ]
     )
+    if on_github:
+        matcher.fnmatch_lines("::endgroup::")
 
 
 def test_here_flag(cli_runner, project_tree, monkeypatch):
