@@ -1,3 +1,10 @@
+1.3.1 (2024-02-29)
+------------------
+
+* Fix grouping under GitHub actions: print without colors, otherwise the ``::group::`` instructions are not processed.
+* When running under GitHub actions, print the ``::endgroup::``  prefix when finishing processing.
+
+
 1.3.0 (2024-02-28)
 ------------------
 

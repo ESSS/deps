@@ -1,5 +1,4 @@
-Deps
-====
+# Deps
 
 [![link](https://img.shields.io/conda/vn/conda-forge/deps.svg)](https://anaconda.org/conda-forge/deps)
 [![link](https://github.com/ESSS/deps/workflows/build/badge.svg)](https://github.com/ESSS/deps/actions)
@@ -11,8 +10,7 @@ It is meant to be used along with `conda devenv`: https://github.com/ESSS/conda-
 it reads the contents of the `includes` sections of `environment.devenv.yml`, which contains
 the relative paths of the dependencies where commands should be executed.
 
-Examples
-=========
+# Examples
 
 `deps inv codegen` will run `inv codegen` on the projects and its dependencies sequentially, respecting dependencies.
 
@@ -22,8 +20,14 @@ but respecting dependencies (so, it'll only run in parallel commands after their
 `deps inv codegen -j 16 --jobs-unordered` will run `inv codegen` on the projects and its dependencies
 with full-paralelization, without respecting any particular order.
 
-Usage
-=====
+## GitHub Actions
+
+Since version `1.3.1`, `deps` will automatically print `::group::` and `::endgroup::` markers when running in GitHub actions, which makes for better experience when visualizing the logs.
+
+It detects this by the presence of the `GITHUB_WORKSPACE` environment variable.
+
+
+# Usage
 
 Program to list development dependencies of `conda-devenv` projects, or to execute a command for each dependency:
 
@@ -135,7 +139,6 @@ Options Description:
 
     Show this message and exit.
 
-License
-========
+# License
 
 Free software: MIT license
