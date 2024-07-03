@@ -8,6 +8,8 @@ import subprocess
 import sys
 import textwrap
 from collections import OrderedDict, namedtuple
+from contextlib import contextmanager
+from tempfile import TemporaryDirectory
 
 import click
 
@@ -975,17 +977,18 @@ def cli(
             return 0
 
         # Execution.
-        execution_return = execute_command_in_dependencies(
-            command,
-            deps_in_order,
-            required_files_filter=required_files_filter,
-            dry_run=dry_run,
-            verbose=verbose,
-            continue_on_failure=continue_on_failure,
-            here=here,
-            jobs=jobs,
-            jobs_unordered=jobs_unordered,
-        )
+        with setup_deps_work_dir():
+            execution_return = execute_command_in_dependencies(
+                command,
+                deps_in_order,
+                required_files_filter=required_files_filter,
+                dry_run=dry_run,
+                verbose=verbose,
+                continue_on_failure=continue_on_failure,
+                here=here,
+                jobs=jobs,
+                jobs_unordered=jobs_unordered,
+            )
 
         click.secho("Total time: {:.2f}s".format(time.time() - initial_time))
 
@@ -994,6 +997,24 @@ def cli(
     finally:
         _click_echo_color = None
         click.utils.auto_wrap_for_ansi = original_auto_wrap_for_ansi
+
+
+@contextmanager
+def setup_deps_work_dir():
+    """
+    Manages the `DEPS_WORK_DIR` directory.
+    """
+    # Prefer the GHA runner temporary directory if available, if not, fallback to the default temporary directory
+    # by passing None.
+    dir = os.environ.get("RUNNER_TEMP")
+    with TemporaryDirectory(
+        prefix="deps-", dir=dir, ignore_cleanup_errors=True
+    ) as tmpdir:
+        os.environ["DEPS_WORK_DIR"] = tmpdir
+        try:
+            yield
+        finally:
+            del os.environ["DEPS_WORK_DIR"]
 
 
 def shell_execute(command, cwd, buffer_output=False):

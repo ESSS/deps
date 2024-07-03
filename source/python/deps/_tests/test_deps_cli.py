@@ -3,6 +3,7 @@ import stat
 import sys
 import textwrap
 from builtins import str
+from pathlib import Path
 
 import pytest
 from _pytest.pytester import LineMatcher
@@ -1114,3 +1115,26 @@ def test_empty_includes(cli_runner, tmpdir_factory, piped_shell_execute):
             "project_with_empty_includes (1/1)",
         ]
     )
+
+
+def test_work_dir(cli_runner, project_tree, monkeypatch, capfd):
+    # Use Python to get the work directory and just write a file to it (contents do not matter).
+    command_args = [
+        "--",
+        "python",
+        "-c",
+        "import os;"
+        "from pathlib import Path;"
+        "d=Path(os.environ['DEPS_WORK_DIR']);"
+        "print(d);"
+        "d.joinpath('foo').write_text('hello')",
+    ]
+    monkeypatch.chdir(project_tree.join("root_b"))
+    result = cli_runner.invoke(deps_cli.cli, command_args)
+    assert result.exit_code == 0, result.output
+    lines = [x.strip() for x in capfd.readouterr().out.splitlines()]
+    # Ensure each project printed the work directory, and ensure they all used the same one.
+    assert len(lines) == 4
+    assert len(set(lines)) == 1
+    # Ensure the work directory no longer exists at this point.
+    assert not Path(lines[0]).is_dir()

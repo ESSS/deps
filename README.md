@@ -26,6 +26,17 @@ Since version `1.3.1`, `deps` will automatically print `::group::` and `::endgro
 
 It detects this by the presence of the `GITHUB_WORKSPACE` environment variable.
 
+## EDEN_WORK_DIR
+
+Since version `1.4.0`, each `deps` invocation will create an empty temporary directory which can be used as a
+"work/staging area" by executing code. This has many possible uses:
+
+1. Caching the conda environment used for the `deps` invocation by writing it to a file in `$EDEN_WORK_DIR`.
+2. Check if a certain operation has already been executed in the current `deps` invocation, say running a per-repository
+   operation only once (for example pre-commit), by writing some to a file in `$EDEN_WORK_DIR`.
+
+`deps` is responsible for creating a unique directory for each invocation (each invocation uses a different name), so
+even different `deps` processes running at the same time will not step on each other's toes.
 
 # Usage
 
