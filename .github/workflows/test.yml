@@ -1,12 +1,10 @@
-name: build
+name: test
 
 on:
   push:
     branches:
     - "master"
   pull_request:
-  schedule:
-  - cron: "0 2 * * 1"  # 1=monday
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -14,7 +12,7 @@ concurrency:
 
 jobs:
 
-  build:
+  test:
 
     runs-on: ${{ matrix.os }}
 
