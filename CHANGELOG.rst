@@ -1,3 +1,11 @@
+1.4.0 (2024-07-03)
+------------------
+
+* Now a per-deps invocation temporary directory is created and accessible via the ``EDEN_WORK_DIR`` environment variable.
+  The directory is cleared after the deps invocation ends, so it is suitable for temporary caching of information that
+  should be reused in that invocation (environment packages, if certain tasks have already executed, etc).
+
+
 1.3.1 (2024-02-29)
 ------------------
 
