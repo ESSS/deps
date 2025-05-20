@@ -352,11 +352,24 @@ def test_script_return_code(cli_runner, project_tree, piped_shell_execute):
     )
 
 
+def skip_if_linux(reason):
+    """
+    Create a skipif mark to skip when in linux with the given `reason`.
+
+    :type reason: str
+    :return: a `pytest.mark.skipif`
+    """
+    return pytest.mark.skipif(sys.platform == "linux", reason=reason)
+
+
 @pytest.mark.parametrize(
     "force",
     [
         True,
-        False,
+        pytest.param(
+            False,
+            marks=skip_if_linux("no color is not an option on linux"),
+        ),
     ],
 )
 @pytest.mark.parametrize(
@@ -380,22 +393,18 @@ def test_force_color(
     :type project_tree: py.path.local
     :type piped_shell_execute: mocker.patch
     """
-
-    def configure_force_color():
-        if use_env_var:
-            extra_env["DEPS_FORCE_COLOR"] = "1" if force else "0"
-        else:
-            command_args.insert(0, "--force-color" if force else "--no-force-color")
-
     root_b = str(project_tree.join("root_b"))
     # Prepare the invocation.
     command_args = ["-v", "-p", root_b, "echo", "test", "{name}"]
     extra_env = {}
-    configure_force_color()
+    if use_env_var:
+        extra_env["DEPS_FORCE_COLOR"] = "1" if force else "0"
+    else:
+        command_args.insert(0, "--force-color" if force else "--no-force-color")
 
     # Since `CliRunner.invoke` captures the output the stdout/stderr is not a tty.
     result = cli_runner.invoke(
-        deps_cli.cli, command_args, env=extra_env, color=None, catch_exceptions=False
+        deps_cli.cli, command_args, env=extra_env, color=False, catch_exceptions=False
     )
     assert result.exit_code == 0, result.output
     output_repr = repr(result.output)
