@@ -1,7 +1,4 @@
-#!/usr/bin/env python
-
 import functools
-import io
 import os
 import platform
 import subprocess
@@ -10,10 +7,9 @@ import textwrap
 from collections import OrderedDict, namedtuple
 from contextlib import contextmanager
 from tempfile import TemporaryDirectory
-
+import importlib_metadata
 import click
 
-from .version import __version__
 
 click.disable_unicode_literals_warning = True
 
@@ -247,7 +243,7 @@ def find_directories(raw_directories):
     return directories
 
 
-def obtain_all_dependecies_recursively(
+def obtain_all_dependencies_recursively(
     root_directories, ignored_projects, skipped_projects
 ):
     """
@@ -766,7 +762,7 @@ def execute(formatted_command, working_dir, buffer_output=False):
 
 @click.command(name=PROG_NAME)
 @click.argument("command", nargs=-1)
-@click.version_option(__version__)
+@click.version_option(importlib_metadata.version("deps"))
 @click.option(
     "--project",
     "-p",
@@ -928,7 +924,7 @@ def cli(
 
         directories = find_directories(project)
 
-        root_deps = obtain_all_dependecies_recursively(
+        root_deps = obtain_all_dependencies_recursively(
             directories, ignore_project, skip_project
         )
         if repos:
