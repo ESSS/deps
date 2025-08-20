@@ -4,15 +4,17 @@ import sys
 import textwrap
 from builtins import str
 from pathlib import Path
+from typing import Any
 
 import pytest
 from _pytest.pytester import LineMatcher
+from click.testing import CliRunner
 
 from deps import deps_cli
 
 
 @pytest.fixture(autouse=True)
-def cleanup_env(monkeypatch):
+def cleanup_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     Remove the GITHUB_WORKSPACE from the testing environment, otherwise the presence of this
     variable will cause all section outputs to contain ::group:: when running inside GH actions itself.
@@ -21,12 +23,8 @@ def cleanup_env(monkeypatch):
 
 
 @pytest.fixture(scope="session")
-def project_tree(tmpdir_factory):
-    """
-    :type tmpdir_factory: _pytest.tmpdir.TempdirFactory
-    :rtype: py.path.local
-    """
-    test_projects = tmpdir_factory.mktemp("test_projects")
+def project_tree(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    test_projects = tmp_path_factory.mktemp("test_projects")
     projects = {
         "root_a": ["dep_a.1", "dep_a.2"],
         "root_b": ["bs/dep_b.1"],
@@ -49,9 +47,12 @@ def project_tree(tmpdir_factory):
     }
     for proj, deps in projects.items():
         proj_path = proj.split("/")
-        proj_dir = test_projects.ensure(*proj_path, dir=True)
-        test_projects.ensure(proj_path[0], ".git", dir=True)  # Fake git repo.
-        env_yml = proj_dir.join("environment.devenv.yml")
+        proj_dir = test_projects.joinpath(*proj_path)
+        proj_dir.mkdir(parents=True, exist_ok=True)
+        test_projects.joinpath(proj_path[0], ".git").mkdir(
+            exist_ok=True
+        )  # Fake git repo.
+        env_yml = proj_dir.joinpath("environment.devenv.yml")
         env_content = ["name: {}".format(proj), ""]
         if len(deps) > 0:
             env_content.append("includes:")
@@ -62,9 +63,9 @@ def project_tree(tmpdir_factory):
                 ]
             )
             env_content.append("")
-        env_yml.write("\n".join(env_content))
+        env_yml.write_text("\n".join(env_content))
     # Add a non-project folder.
-    test_projects.mkdir("not_a_project")
+    test_projects.joinpath("not_a_project").mkdir()
     # Add test scripts to some projects.
     batch_script = textwrap.dedent(
         """\
@@ -87,26 +88,23 @@ def project_tree(tmpdir_factory):
         """
     )
     for proj in ["root_a", "root_b", "dep_z"]:
-        tasks_dir = test_projects.join(proj).mkdir("tasks")
-        script_file = tasks_dir.join("asd.bat")
-        script_file.write(batch_script)
+        tasks_dir = test_projects.joinpath(proj, "tasks")
+        tasks_dir.mkdir()
+        script_file = tasks_dir.joinpath("asd.bat")
+        script_file.write_text(batch_script)
 
-        script_file = tasks_dir.join("asd")
-        script_file.write(bash_script)
-        script_file = str(script_file)
+        script_file = tasks_dir.joinpath("asd")
+        script_file.write_text(bash_script)
         st = os.stat(script_file)
         os.chmod(script_file, st.st_mode | stat.S_IEXEC)
 
-        script_file = tasks_dir.join("asd.py")
-        script_file.write(python_script)
+        script_file = tasks_dir.joinpath("asd.py")
+        script_file.write_text(python_script)
 
     return test_projects
 
 
-def test_deps_help(cli_runner):
-    """
-    :type cli_runner: click.testing.CliRunner
-    """
+def test_deps_help(cli_runner: CliRunner) -> None:
     result = cli_runner.invoke(deps_cli.cli, ["--help"])
     assert result.exit_code == 0, result.output
     matcher = LineMatcher(result.output.splitlines())
@@ -122,13 +120,10 @@ def test_deps_help(cli_runner):
     )
 
 
-def test_no_args(cli_runner, project_tree, monkeypatch):
-    """
-    :type cli_runner: click.testing.CliRunner
-    :type project_tree: py.path.local
-    :type monkeypatch: _pytest.monkeypatch
-    """
-    monkeypatch.chdir(project_tree.join("root_b"))
+def test_no_args(
+    cli_runner: CliRunner, project_tree: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(project_tree.joinpath("root_b"))
     result = cli_runner.invoke(deps_cli.cli)
     assert result.exit_code == 0, result.output
     assert result.output == textwrap.dedent(
@@ -141,13 +136,10 @@ def test_no_args(cli_runner, project_tree, monkeypatch):
     )
 
 
-def test_no_args_cyclic_deps(cli_runner, project_tree, monkeypatch):
-    """
-    :type cli_runner: click.testing.CliRunner
-    :type project_tree: py.path.local
-    :type monkeypatch: _pytest.monkeypatch
-    """
-    monkeypatch.chdir(project_tree.join("root_c"))
+def test_no_args_cyclic_deps(
+    cli_runner: CliRunner, project_tree: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(project_tree.joinpath("root_c"))
     result = cli_runner.invoke(deps_cli.cli)
     assert result.exit_code == 0, result.output
     assert result.output == textwrap.dedent(
@@ -161,13 +153,10 @@ def test_no_args_cyclic_deps(cli_runner, project_tree, monkeypatch):
     )
 
 
-def test_cant_find_root(cli_runner, project_tree, piped_shell_execute):
-    """
-    :type cli_runner: click.testing.CliRunner
-    :type project_tree: py.path.local
-    :type piped_shell_execute: mocker.patch
-    """
-    proj_dir = str(project_tree.join("not_a_project"))
+def test_cant_find_root(
+    cli_runner: CliRunner, project_tree: Path, piped_shell_execute: None
+) -> None:
+    proj_dir = str(project_tree.joinpath("not_a_project"))
     command_args = ["-p", proj_dir, "echo", "Hi", "{name}!"]
     result = cli_runner.invoke(deps_cli.cli, command_args)
     assert result.exception is None or isinstance(result.exception, SystemExit)
@@ -179,7 +168,7 @@ def test_cant_find_root(cli_runner, project_tree, piped_shell_execute):
         ]
     )
 
-    proj_dir = str(project_tree.join("not_a_valid_folder"))
+    proj_dir = str(project_tree.joinpath("not_a_valid_folder"))
     command_args = ["-p", proj_dir, "echo", "Hi", "{name}!"]
     result = cli_runner.invoke(deps_cli.cli, command_args)
     assert result.exception is None or isinstance(result.exception, SystemExit)
@@ -193,18 +182,18 @@ def test_cant_find_root(cli_runner, project_tree, piped_shell_execute):
 
 
 @pytest.mark.parametrize("on_github", [True, False])
-def test_execution_on_project_dir(cli_runner, project_tree, monkeypatch, on_github):
-    """
-    :type cli_runner: click.testing.CliRunner
-    :type project_tree: py.path.local
-    :type monkeypatch: _pytest.monkeypatch
-    """
+def test_execution_on_project_dir(
+    cli_runner: CliRunner,
+    project_tree: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    on_github: bool,
+) -> None:
     if on_github:
         monkeypatch.setenv("GITHUB_WORKSPACE", "some/path")
         expected_prefix = "::group::"
     else:
         expected_prefix = ""
-    monkeypatch.chdir(project_tree.join("root_b"))
+    monkeypatch.chdir(project_tree.joinpath("root_b"))
     command_args = ["-v", "--", "python", "-c", '"name: {name}"']
     result = cli_runner.invoke(deps_cli.cli, command_args)
     assert result.exit_code == 0, result.output
@@ -233,13 +222,10 @@ def test_execution_on_project_dir(cli_runner, project_tree, monkeypatch, on_gith
         matcher.fnmatch_lines("::endgroup::")
 
 
-def test_here_flag(cli_runner, project_tree, monkeypatch):
-    """
-    :type cli_runner: click.testing.CliRunner
-    :type project_tree: py.path.local
-    :type monkeypatch: _pytest.monkeypatch
-    """
-    monkeypatch.chdir(project_tree.join("root_b"))
+def test_here_flag(
+    cli_runner: CliRunner, project_tree: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(project_tree.joinpath("root_b"))
     command_args = ["-v", "--here", "--", "python", "-c", '"name: {name}"']
     result = cli_runner.invoke(deps_cli.cli, command_args)
     assert result.exit_code == 0, result.output
@@ -263,13 +249,9 @@ def test_here_flag(cli_runner, project_tree, monkeypatch):
     )
 
 
-def test_multiple_projects(cli_runner, project_tree):
-    """
-    :type cli_runner: click.testing.CliRunner
-    :type project_tree: py.path.local
-    """
+def test_multiple_projects(cli_runner: CliRunner, project_tree: Path) -> None:
     projects = ["root_a", "root_b"]
-    projects = [str(project_tree.join(name)) for name in projects]
+    projects = [str(project_tree.joinpath(name)) for name in projects]
     command_args = [("--project={}".format(project)) for project in projects]
     result = cli_runner.invoke(deps_cli.cli, command_args)
     assert result.exit_code == 0, result.output
@@ -288,13 +270,10 @@ def test_multiple_projects(cli_runner, project_tree):
     )
 
 
-def test_script_execution(cli_runner, project_tree, piped_shell_execute):
-    """
-    :type cli_runner: click.testing.CliRunner
-    :type project_tree: py.path.local
-    :type piped_shell_execute: mocker.patch
-    """
-    root_b = str(project_tree.join("root_b"))
+def test_script_execution(
+    cli_runner: CliRunner, project_tree: Path, piped_shell_execute: None
+) -> None:
+    root_b = str(project_tree.joinpath("root_b"))
     task_script = os.path.join("tasks", "asd")
     command_args = [
         "-p",
@@ -329,13 +308,10 @@ def test_script_execution(cli_runner, project_tree, piped_shell_execute):
     )
 
 
-def test_script_return_code(cli_runner, project_tree, piped_shell_execute):
-    """
-    :type cli_runner: click.testing.CliRunner
-    :type project_tree: py.path.local
-    :type piped_shell_execute: mocker.patch
-    """
-    root_b = str(project_tree.join("root_b"))
+def test_script_return_code(
+    cli_runner: CliRunner, project_tree: Path, piped_shell_execute: None
+) -> None:
+    root_b = str(project_tree.joinpath("root_b"))
     task_script = os.path.join("tasks", "does-not-exist")
     command_args = ["-p", root_b, "-v", task_script, "{name}", "{abs}"]
     result = cli_runner.invoke(deps_cli.cli, command_args)
@@ -352,12 +328,9 @@ def test_script_return_code(cli_runner, project_tree, piped_shell_execute):
     )
 
 
-def skip_if_linux(reason):
+def skip_if_linux(reason: str) -> Any:
     """
     Create a skipif mark to skip when in linux with the given `reason`.
-
-    :type reason: str
-    :return: a `pytest.mark.skipif`
     """
     return pytest.mark.skipif(sys.platform == "linux", reason=reason)
 
@@ -380,20 +353,13 @@ def skip_if_linux(reason):
     ],
 )
 def test_force_color(
-    use_env_var,
-    force,
-    cli_runner,
-    project_tree,
-    piped_shell_execute,
-):
-    """
-    :type use_env_var: bool
-    :type force: bool
-    :type cli_runner: click.testing.CliRunner
-    :type project_tree: py.path.local
-    :type piped_shell_execute: mocker.patch
-    """
-    root_b = str(project_tree.join("root_b"))
+    use_env_var: bool,
+    force: bool,
+    cli_runner: CliRunner,
+    project_tree: Path,
+    piped_shell_execute: None,
+) -> None:
+    root_b = str(project_tree.joinpath("root_b"))
     # Prepare the invocation.
     command_args = ["-v", "-p", root_b, "echo", "test", "{name}"]
     extra_env = {}
@@ -421,29 +387,23 @@ def test_force_color(
     ],
 )
 def test_ignore_projects(
-    use_env_var,
-    cli_runner,
-    project_tree,
-    piped_shell_execute,
-):
-    """
-    :type use_env_var: bool
-    :type cli_runner: click.testing.CliRunner
-    :type project_tree: py.path.local
-    :type piped_shell_execute: mocker.patch
-    """
+    use_env_var: bool,
+    cli_runner: CliRunner,
+    project_tree: Path,
+    piped_shell_execute: None,
+) -> None:
 
-    def configure_ignored_projects():
+    def configure_ignored_projects() -> None:
         if use_env_var:
             extra_env["DEPS_IGNORE_PROJECT"] = str("dep_a.1{}dep_z".format(os.pathsep))
         else:
             command_args.insert(0, "--ignore-project=dep_a.1")
             command_args.insert(1, "--ignore-project=dep_z")
 
-    root_a = str(project_tree.join("root_a"))
+    root_a = str(project_tree.joinpath("root_a"))
     # Prepare the invocation.
     command_args = ["-p", root_a, "echo", "test", "{name}"]
-    extra_env = {}
+    extra_env: dict[str, str] = {}
     configure_ignored_projects()
 
     result = cli_runner.invoke(deps_cli.cli, command_args, env=extra_env)
@@ -483,29 +443,23 @@ def test_ignore_projects(
     ],
 )
 def test_skip_projects(
-    use_env_var,
-    cli_runner,
-    project_tree,
-    piped_shell_execute,
-):
-    """
-    :type use_env_var: bool
-    :type cli_runner: click.testing.CliRunner
-    :type project_tree: py.path.local
-    :type piped_shell_execute: mocker.patch
-    """
+    use_env_var: bool,
+    cli_runner: CliRunner,
+    project_tree: Path,
+    piped_shell_execute: None,
+) -> None:
 
-    def configure_skipped_projects():
+    def configure_skipped_projects() -> None:
         if use_env_var:
             extra_env["DEPS_SKIP_PROJECT"] = str("dep_a.1{}dep_z".format(os.pathsep))
         else:
             command_args.insert(0, "--skip-project=dep_a.1")
             command_args.insert(1, "--skip-project=dep_z")
 
-    root_a = str(project_tree.join("root_a"))
+    root_a = str(project_tree.joinpath("root_a"))
     # Prepare the invocation.
     command_args = ["-p", root_a, "echo", "test", "{name}"]
-    extra_env = {}
+    extra_env: dict[str, str] = {}
     configure_skipped_projects()
 
     result = cli_runner.invoke(deps_cli.cli, command_args, env=extra_env)
@@ -551,19 +505,13 @@ def test_skip_projects(
     ],
 )
 def test_conflict_ignore_skip_projects(
-    use_env_var,
-    cli_runner,
-    project_tree,
-    piped_shell_execute,
-):
-    """
-    :type use_env_var: bool
-    :type cli_runner: click.testing.CliRunner
-    :type project_tree: py.path.local
-    :type piped_shell_execute: mocker.patch
-    """
+    use_env_var: bool,
+    cli_runner: CliRunner,
+    project_tree: Path,
+    piped_shell_execute: None,
+) -> None:
 
-    def configure_skipped_projects():
+    def configure_skipped_projects() -> None:
         if use_env_var:
             extra_env["DEPS_SKIP_PROJECT"] = "dep_a.1"
             extra_env["DEPS_IGNORE_PROJECT"] = "dep_a.1"
@@ -571,10 +519,10 @@ def test_conflict_ignore_skip_projects(
             command_args.insert(0, "--skip-project=dep_a.1")
             command_args.insert(0, "--ignore-project=dep_a.1")
 
-    root_a = str(project_tree.join("root_a"))
+    root_a = str(project_tree.joinpath("root_a"))
     # Prepare the invocation.
     command_args = ["-p", root_a, "echo", "test", "{name}"]
-    extra_env = {}
+    extra_env: dict[str, str] = {}
     configure_skipped_projects()
 
     result = cli_runner.invoke(deps_cli.cli, command_args, env=extra_env)
@@ -608,13 +556,10 @@ def test_conflict_ignore_skip_projects(
     )
 
 
-def test_require_file(cli_runner, project_tree, piped_shell_execute):
-    """
-    :type cli_runner: click.testing.CliRunner
-    :type project_tree: py.path.local
-    :type piped_shell_execute: mocker.patch
-    """
-    root_b = str(project_tree.join("root_b"))
+def test_require_file(
+    cli_runner: CliRunner, project_tree: Path, piped_shell_execute: None
+) -> None:
+    root_b = str(project_tree.joinpath("root_b"))
     base_args = ["-p", root_b, "--require-file", "tasks/asd"]
 
     command_args = base_args + ["-v", "echo", "This", "is", "{name}"]
@@ -649,13 +594,10 @@ def test_require_file(cli_runner, project_tree, piped_shell_execute):
     )
 
 
-def test_continue_on_failure(cli_runner, project_tree, piped_shell_execute):
-    """
-    :type cli_runner: click.testing.CliRunner
-    :type project_tree: py.path.local
-    :type piped_shell_execute: mocker.patch
-    """
-    root_b = str(project_tree.join("root_b"))
+def test_continue_on_failure(
+    cli_runner: CliRunner, project_tree: Path, piped_shell_execute: None
+) -> None:
+    root_b = str(project_tree.joinpath("root_b"))
     base_args = ["--continue-on-failure", "-p", root_b]
 
     # All fail.
@@ -722,13 +664,10 @@ def test_continue_on_failure(cli_runner, project_tree, piped_shell_execute):
     assert "deps: error: Command failed" not in result.output
 
 
-def test_list_repos(cli_runner, project_tree, piped_shell_execute):
-    """
-    :type cli_runner: click.testing.CliRunner
-    :type project_tree: py.path.local
-    :type piped_shell_execute: mocker.patch
-    """
-    root = str(project_tree.join("root_c"))
+def test_list_repos(
+    cli_runner: CliRunner, project_tree: Path, piped_shell_execute: None
+) -> None:
+    root = str(project_tree.joinpath("root_c"))
     base_args = ["-p", root, "--repos"]
 
     command_args = base_args
@@ -760,13 +699,10 @@ def test_list_repos(cli_runner, project_tree, piped_shell_execute):
     )
 
 
-def test_list_repos_with_ignored_project(cli_runner, project_tree, piped_shell_execute):
-    """
-    :type cli_runner: click.testing.CliRunner
-    :type project_tree: py.path.local
-    :type piped_shell_execute: mocker.patch
-    """
-    root = str(project_tree.join("root_c"))
+def test_list_repos_with_ignored_project(
+    cli_runner: CliRunner, project_tree: Path, piped_shell_execute: None
+) -> None:
+    root = str(project_tree.joinpath("root_c"))
     base_args = ["-p", root, "--repos"]
 
     # Test pretty print.
@@ -797,13 +733,10 @@ def test_list_repos_with_ignored_project(cli_runner, project_tree, piped_shell_e
     )
 
 
-def test_list_repos_with_skipped_project(cli_runner, project_tree, piped_shell_execute):
-    """
-    :type cli_runner: click.testing.CliRunner
-    :type project_tree: py.path.local
-    :type piped_shell_execute: mocker.patch
-    """
-    root = str(project_tree.join("root_c"))
+def test_list_repos_with_skipped_project(
+    cli_runner: CliRunner, project_tree: Path, piped_shell_execute: None
+) -> None:
+    root = str(project_tree.joinpath("root_c"))
     base_args = ["-p", root, "--repos"]
 
     # Test pretty print.
@@ -838,14 +771,9 @@ def test_list_repos_with_skipped_project(cli_runner, project_tree, piped_shell_e
 
 
 def test_list_repos_conflict_skipped_ignored_project(
-    cli_runner, project_tree, piped_shell_execute
-):
-    """
-    :type cli_runner: click.testing.CliRunner
-    :type project_tree: py.path.local
-    :type piped_shell_execute: mocker.patch
-    """
-    root = str(project_tree.join("root_c"))
+    cli_runner: CliRunner, project_tree: Path, piped_shell_execute: None
+) -> None:
+    root = str(project_tree.joinpath("root_c"))
     base_args = ["-p", root, "--repos"]
 
     # Test pretty print.
@@ -885,13 +813,10 @@ def test_list_repos_conflict_skipped_ignored_project(
 
 
 @pytest.mark.parametrize("mode", ["normal", "skipped"])
-def test_list_repos_precedence(mode, cli_runner, project_tree, piped_shell_execute):
-    """
-    :type cli_runner: click.testing.CliRunner
-    :type project_tree: py.path.local
-    :type piped_shell_execute: mocker.patch
-    """
-    root = str(project_tree.join("root_d"))
+def test_list_repos_precedence(
+    mode: str, cli_runner: CliRunner, project_tree: Path, piped_shell_execute: None
+) -> None:
+    root = str(project_tree.joinpath("root_d"))
     base_args = ["-p", root, "--repos"]
 
     command_args = base_args + ["-pp", "--ignore-project=d1", "--ignore-project=d2"]
@@ -917,13 +842,10 @@ def test_list_repos_precedence(mode, cli_runner, project_tree, piped_shell_execu
         )
 
 
-def test_deps_parallel_unordered(cli_runner, project_tree, monkeypatch):
-    """
-    :type cli_runner: click.testing.CliRunner
-    :type project_tree: py.path.local
-    :type piped_shell_execute: mocker.patch
-    """
-    monkeypatch.chdir(project_tree.join("root_b"))
+def test_deps_parallel_unordered(
+    cli_runner: CliRunner, project_tree: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(project_tree.joinpath("root_b"))
     command_args = [
         "--jobs=2",
         "--jobs-unordered",
@@ -949,16 +871,14 @@ def test_deps_parallel_unordered(cli_runner, project_tree, monkeypatch):
 
 
 def test_deps_parallel_unordered_error(
-    cli_runner, project_tree, monkeypatch, piped_shell_execute
-):
-    """
-    :type cli_runner: click.testing.CliRunner
-    :type project_tree: py.path.local
-    :type piped_shell_execute: mocker.patch
-    """
+    cli_runner: CliRunner,
+    project_tree: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    piped_shell_execute: None,
+) -> None:
     task_script = os.path.join("tasks", "does-not-exist")
 
-    monkeypatch.chdir(project_tree.join("root_b"))
+    monkeypatch.chdir(project_tree.joinpath("root_b"))
     command_args = ["-v", "--jobs=2", "--jobs-unordered", task_script]
 
     result = cli_runner.invoke(deps_cli.cli, command_args)
@@ -974,13 +894,10 @@ def test_deps_parallel_unordered_error(
     )
 
 
-def test_deps_parallel(cli_runner, project_tree, monkeypatch):
-    """
-    :type cli_runner: click.testing.CliRunner
-    :type project_tree: py.path.local
-    :type piped_shell_execute: mocker.patch
-    """
-    monkeypatch.chdir(project_tree.join("root_b"))
+def test_deps_parallel(
+    cli_runner: CliRunner, project_tree: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(project_tree.joinpath("root_b"))
     command_args = ["--jobs=2", "--", "python", "-c", '"name: {name}"']
 
     result = cli_runner.invoke(deps_cli.cli, command_args)
@@ -1004,13 +921,10 @@ def test_deps_parallel(cli_runner, project_tree, monkeypatch):
     )
 
 
-def test_deps_parallel_2(cli_runner, project_tree, monkeypatch):
-    """
-    :type cli_runner: click.testing.CliRunner
-    :type project_tree: py.path.local
-    :type piped_shell_execute: mocker.patch
-    """
-    monkeypatch.chdir(project_tree.join("root_a"))
+def test_deps_parallel_2(
+    cli_runner: CliRunner, project_tree: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(project_tree.joinpath("root_a"))
     command_args = ["--jobs=2", "--", "python", "-c", '"name: {name}"']
 
     result = cli_runner.invoke(deps_cli.cli, command_args)
@@ -1036,13 +950,10 @@ def test_deps_parallel_2(cli_runner, project_tree, monkeypatch):
     )
 
 
-def test_deps_parallel_3(cli_runner, project_tree, monkeypatch):
-    """
-    :type cli_runner: click.testing.CliRunner
-    :type project_tree: py.path.local
-    :type piped_shell_execute: mocker.patch
-    """
-    monkeypatch.chdir(project_tree.join("root_a"))
+def test_deps_parallel_3(
+    cli_runner: CliRunner, project_tree: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(project_tree.joinpath("root_a"))
     command_args = ["--jobs=2", "--", "python", "-c", 'import sys;print("foo")']
 
     result = cli_runner.invoke(deps_cli.cli, command_args)
@@ -1051,8 +962,12 @@ def test_deps_parallel_3(cli_runner, project_tree, monkeypatch):
     assert result.output.count("foo") == 6
 
 
-def test_no_expected_env_file(cli_runner, tmpdir_factory, piped_shell_execute):
-    test_projects = tmpdir_factory.mktemp("test_projects")
+def test_no_expected_env_file(
+    cli_runner: CliRunner,
+    tmp_path_factory: pytest.TempPathFactory,
+    piped_shell_execute: None,
+) -> None:
+    test_projects = tmp_path_factory.mktemp("test_projects")
     projects = {
         "expected_env_file": (
             "environment.devenv.yml",
@@ -1062,16 +977,17 @@ def test_no_expected_env_file(cli_runner, tmpdir_factory, piped_shell_execute):
     }
     for proj, (env_filename, deps) in projects.items():
         proj_path = proj.split("/")
-        proj_dir = test_projects.ensure(*proj_path, dir=True)
-        env_yml = proj_dir.join(env_filename)
+        proj_dir = test_projects.joinpath(*proj_path)
+        proj_dir.mkdir(parents=True, exist_ok=True)
+        env_yml = proj_dir.joinpath(env_filename)
         env_content = ["name: {}".format(proj), ""]
         if len(deps) > 0:
             env_content.append("includes:")
             env_content.extend(["  - {{{{ root }}}}/{}".format(dep) for dep in deps])
             env_content.append("")
-        env_yml.write("\n".join(env_content))
+        env_yml.write_text("\n".join(env_content))
 
-    root = str(test_projects.join("expected_env_file"))
+    root = str(test_projects.joinpath("expected_env_file"))
     # Prepare the invocation.
     command_args = ["-p", root, "echo", "test", "{name}"]
     result = cli_runner.invoke(deps_cli.cli, command_args)
@@ -1088,11 +1004,16 @@ def test_no_expected_env_file(cli_runner, tmpdir_factory, piped_shell_execute):
     )
 
 
-def test_empty_environment(cli_runner, tmpdir_factory, piped_shell_execute):
-    test_project = tmpdir_factory.mktemp("test_empty_environment")
-    proj_dir = test_project.ensure("project_with_empty_environment", dir=True)
-    env_yml = proj_dir.join("environment.devenv.yml")
-    env_yml.write("")
+def test_empty_environment(
+    cli_runner: CliRunner,
+    tmp_path_factory: pytest.TempPathFactory,
+    piped_shell_execute: None,
+) -> None:
+    test_project = tmp_path_factory.mktemp("test_empty_environment")
+    proj_dir = test_project.joinpath("project_with_empty_environment")
+    proj_dir.mkdir()
+    env_yml = proj_dir.joinpath("environment.devenv.yml")
+    env_yml.write_text("")
 
     root = str(proj_dir)
     command_args = ["-p", root, "echo", "test", "{name}"]
@@ -1107,11 +1028,16 @@ def test_empty_environment(cli_runner, tmpdir_factory, piped_shell_execute):
     )
 
 
-def test_empty_includes(cli_runner, tmpdir_factory, piped_shell_execute):
-    test_project = tmpdir_factory.mktemp("test_empty_includes")
-    proj_dir = test_project.ensure("project_with_empty_includes", dir=True)
-    env_yml = proj_dir.join("environment.devenv.yml")
-    env_yml.write("includes:")
+def test_empty_includes(
+    cli_runner: CliRunner,
+    tmp_path_factory: pytest.TempPathFactory,
+    piped_shell_execute: None,
+) -> None:
+    test_project = tmp_path_factory.mktemp("test_empty_includes")
+    proj_dir = test_project.joinpath("project_with_empty_includes")
+    proj_dir.mkdir()
+    env_yml = proj_dir.joinpath("environment.devenv.yml")
+    env_yml.write_text("includes:")
 
     root = str(proj_dir)
     command_args = ["-p", root, "echo", "test", "{name}"]
@@ -1126,7 +1052,12 @@ def test_empty_includes(cli_runner, tmpdir_factory, piped_shell_execute):
     )
 
 
-def test_work_dir(cli_runner, project_tree, monkeypatch, capfd):
+def test_work_dir(
+    cli_runner: CliRunner,
+    project_tree: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
     # Use Python to get the work directory and just write a file to it (contents do not matter).
     command_args = [
         "--",
@@ -1138,7 +1069,7 @@ def test_work_dir(cli_runner, project_tree, monkeypatch, capfd):
         "print(d);"
         "d.joinpath('foo').write_text('hello')",
     ]
-    monkeypatch.chdir(project_tree.join("root_b"))
+    monkeypatch.chdir(project_tree.joinpath("root_b"))
     result = cli_runner.invoke(deps_cli.cli, command_args)
     assert result.exit_code == 0, result.output
     lines = [x.strip() for x in capfd.readouterr().out.splitlines()]

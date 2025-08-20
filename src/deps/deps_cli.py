@@ -1,15 +1,22 @@
+from __future__ import annotations
 import functools
 import os
 import platform
 import subprocess
 import sys
 import textwrap
-from collections import OrderedDict, namedtuple
+from collections import OrderedDict
+from collections.abc import Sequence, Iterator, Callable
+from concurrent.futures.thread import ThreadPoolExecutor
 from contextlib import contextmanager
+from dataclasses import dataclass
+from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Any
+from ._synchronous_executor import SynchronousExecutor
 import importlib_metadata
 import click
-
+from typing_extensions import overload
 
 click.disable_unicode_literals_warning = True
 
@@ -21,7 +28,7 @@ MAX_LINE_LENGTH = 119
 _click_echo_color = None
 
 
-def echo_verbose_msg(*args, **kwargs):
+def echo_verbose_msg(*args: Any, **kwargs: Any) -> None:
     """
     For "verbose" messages.
     """
@@ -31,7 +38,7 @@ def echo_verbose_msg(*args, **kwargs):
     click.echo(*args, **kwargs)
 
 
-def echo_error(*args, **kwargs):
+def echo_error(*args: Any, **kwargs: Any) -> None:
     """
     For "error" messages.
     """
@@ -57,24 +64,10 @@ def echo_error(*args, **kwargs):
 FILE_WITH_DEPENDENCIES = "environment.devenv.yml"
 
 
-def memoize(fun):
-
-    cache = {}
-
-    @functools.wraps(fun)
-    def wrapper(*args, **kwargs):
-        key = (args, frozenset(kwargs.items()))
-        try:
-            return cache[key]
-        except KeyError:
-            ret = cache[key] = fun(*args, **kwargs)
-            return ret
-
-    return wrapper
-
-
-@memoize
-def get_shallow_dependencies(base_directory, filename=None):
+@functools.cache
+def get_shallow_dependencies(
+    base_directory: str, filename: str | None = None
+) -> Sequence[tuple[str, str]]:
     """
     :param unicode base_directory:
     The project's root directory.
@@ -104,36 +97,34 @@ def get_shallow_dependencies(base_directory, filename=None):
     return includes
 
 
-# ==================================================================================================
-# Common code
-# ==================================================================================================
-_Dep = namedtuple("Dep", "name,abspath,deps,ignored,skipped")
+@dataclass(eq=False)
+class Dep:
+    name: str
+    abspath: str
+    deps: list[Dep]
+    ignored: bool
+    skipped: bool
 
-
-class Dep(_Dep):
-
-    # Overridden to make identity compares (unlike namedtuple which would compare the contents). In
-    # practice, this is needed because the deps is a list, so, Dep couldn't be used as a dict key
-    # or in a set.
-    def __hash__(self):
+    # # Overridden to make identity compares (unlike namedtuple which would compare the contents). In
+    # # practice, this is needed because the deps is a list, so, Dep couldn't be used as a dict key
+    # # or in a set.
+    def __hash__(self) -> int:
         return id(self)
 
-    def __eq__(self, o):
+    def __eq__(self, o: object) -> bool:
         return o is self
 
-    def __ne__(self, o):
-        return not self == o
 
-
-def create_new_dep_from_directory(directory, ignore_projects, skipped_projects):
+def create_new_dep_from_directory(
+    directory: str | Path, ignore_projects: list[str], skipped_projects: list[str]
+) -> Dep:
     """
-    :param unicode directory: Root directory of a project.
-    :param list[unicode] ignore_projects: A list of project names to ignore (set the `ignored` attr
+    :param directory: Root directory of a project.
+    :param ignore_projects: A list of project names to ignore (set the `ignored` attr
     to `True`).
-    :param list[unicode] skipped_projects: A list of project names that should be skipped i.e. they
+    :param skipped_projects: A list of project names that should be skipped i.e. they
     are part of dependencies but they aren't executed. Skipped has less priority than ignored, so
     if a name is in both lists it will be always ignored.
-    :rtype: Dep
     """
     directory = os.path.abspath(directory)
     name = os.path.split(directory)[1]
@@ -146,12 +137,12 @@ def create_new_dep_from_directory(directory, ignore_projects, skipped_projects):
     )
 
 
-def pretty_print_dependency_tree(root_deps):
+def pretty_print_dependency_tree(root_deps: list[Dep]) -> None:
     """
     Prints an indented tree for the projects (and their dependencies). A short legend is printed
     describing the decoration used.
 
-    :param list(Dep) root_deps: The list of root dependencies.
+    :param root_deps: The list of root dependencies.
     """
     already_printed = set()
 
@@ -165,10 +156,14 @@ def pretty_print_dependency_tree(root_deps):
     )
     print(legend)
 
-    def print_formatted_dep(name, identation, name_template="{}"):
-        print(identation + name_template.format(name))
+    def print_formatted_dep(
+        name: str, indentation: str, name_template: str = "{}"
+    ) -> None:
+        print(indentation + name_template.format(name))
 
-    def print_deps(dep_list, indentation_size=0, indentation_string="    "):
+    def print_deps(
+        dep_list: list[Dep], indentation_size: int = 0, indentation_string: str = "    "
+    ) -> None:
         indentation = indentation_string * indentation_size
         next_indentation_size = indentation_size + 1
         for dep in dep_list:
@@ -188,14 +183,13 @@ def pretty_print_dependency_tree(root_deps):
     print_deps(root_deps)
 
 
-def find_ancestor_dir_with(filename, begin_in=None):
+def find_ancestor_dir_with(filename: str, begin_in: str | None = None) -> str | None:
     """
     Look in current and ancestor directories (parent, parent of parent, ...) for a file.
 
-    :param unicode filename: File to find.
-    :param unicode begin_in: Directory to start searching.
+    :param filename: File to find.
+    :param begin_in: Directory to start searching.
 
-    :rtype: unicode
     :return: Absolute path to directory where file is located.
     """
     if begin_in is None:
@@ -214,14 +208,9 @@ def find_ancestor_dir_with(filename, begin_in=None):
         base_directory = parent_base_directory
 
 
-def find_directories(raw_directories):
+def find_directories(raw_directories: list[str]) -> list[str]:
     """
     Find ancestor directories that contain the FILE_WITH_DEPENDENCIES file.
-
-    :type raw_directories: sequence(unicode)
-
-    :rtype: list(unicode)
-    :returns: List of directories.
     """
     raw_directories = list(raw_directories)
 
@@ -244,24 +233,27 @@ def find_directories(raw_directories):
 
 
 def obtain_all_dependencies_recursively(
-    root_directories, ignored_projects, skipped_projects
-):
+    root_directories: list[str],
+    ignored_projects: list[str],
+    skipped_projects: list[str],
+) -> list[Dep]:
     """
     Creates a list with a `Dep` for each item in `root_directories` where each project is inspected
     recursively for its dependencies.
 
-    :param sequence[unicode] root_directories: The root directories identifying projects.
-    :param sequence[unicode] ignored_projects: Project names to be marked as ignored (and do not
+    :param root_directories: The root directories identifying projects.
+    :param ignored_projects: Project names to be marked as ignored (and do not
         recurse into its dependencies).
-    :param sequence[unicode] skipped_projects: Project names to be marked as skipped (it still
+    :param skipped_projects: Project names to be marked as skipped (it still
         recurse into its dependencies).
 
-    :rtype: list(Dep)
     :return: The created list.
     """
     all_deps = {}
 
-    def add_deps_from_directories(directories, list_to_add_deps):
+    def add_deps_from_directories(
+        directories: Sequence[tuple[str, str | None]], list_to_add_deps: list[Dep]
+    ) -> None:
         """
         A data structure (`Dep`) is created for each project rooted in the given directories.
 
@@ -284,27 +276,23 @@ def obtain_all_dependencies_recursively(
                 dep = all_deps[dep_directory]
             list_to_add_deps.append(dep)
 
-    root_deps = []
-    root_directories = [(p, None) for p in root_directories]
-    add_deps_from_directories(root_directories, root_deps)
+    root_deps: list[Dep] = []
+    add_deps_from_directories([(p, None) for p in root_directories], root_deps)
     return root_deps
 
 
-def obtain_repos(dep_list):
+def obtain_repos(dep_list: list[Dep]) -> list[Dep]:
     """
-    Obtaim the repos for the given projects and their dependencies.
-    :param list(Dep) dep_list:
-    :rtype: list(Dep)
+    Obtain the repos for the given projects and their dependencies.
     """
-    all_repos = {}
+    all_repos: dict[tuple[str | None, bool], Dep] = {}
 
-    def obtain_repo_from_dep(dep):
+    def obtain_repo_from_dep(dep: Dep) -> Dep:
         """
-        :param Dep dep: A project.
-        :rtype: Dep
         :return: The repository for the given project. Conserve the `ignored` property.
         """
         directory = find_ancestor_dir_with(".git", dep.abspath)
+        assert directory is not None
         directory = os.path.abspath(directory)
         repo_key = (directory, dep.ignored)
         if repo_key not in all_repos:
@@ -319,11 +307,12 @@ def obtain_repos(dep_list):
 
     visited_deps = []
 
-    def convert_deps_to_repos(deps, list_of_repos, parent):
+    def convert_deps_to_repos(
+        deps: Sequence[Dep], list_of_repos: list[Dep], parent: str | None
+    ) -> None:
         """
-        :param list(Dep) deps:
-        :param list(Dep) list_of_repos: This list will contain the converted repos (is changed).
-        :param unicode|None parent: The parent's name of the given deps (used to break infinite
+        :param list_of_repos: This list will contain the converted repos (is changed).
+        :param parent: The parent's name of the given deps (used to break infinite
             recursion due cyclic dependencies without loosing declared dependencies).
         """
         for dep in deps:
@@ -356,25 +345,25 @@ def obtain_repos(dep_list):
             if repo_dep not in precedence_values:
                 list_of_repos.remove(repo_dep)
 
-    root_repos = []
+    root_repos: list[Dep] = []
     convert_deps_to_repos(dep_list, root_repos, None)
     return root_repos
 
 
-@memoize
-def get_abs_path_to_dep_for_all_deps(dep):
+@functools.cache
+def get_abs_path_to_dep_for_all_deps(dep: Dep) -> OrderedDict[str, Dep]:
     """
     List all dependencies (and sub dependencies) of the given dep.
 
-    :param Dep dep:
-    :return `OrderedDict`:
+    :param dep:
+    :return:
         Returns the abs path of the dep pointing to the dep.
 
     :note:
         The return is memoized, so, it shouldn't be edited in any way.
     """
     result = OrderedDict()
-    other_deps = dep.deps[:]
+    other_deps = list(dep.deps)
     while other_deps:
         next_dep = other_deps.pop()
         if next_dep.abspath in result:
@@ -386,7 +375,7 @@ def get_abs_path_to_dep_for_all_deps(dep):
     return result
 
 
-def obtain_dependencies_ordered_for_execution(root_deps):
+def obtain_dependencies_ordered_for_execution(root_deps: list[Dep]) -> list[Dep]:
     """
     Return a list of the dependencies.
 
@@ -398,19 +387,16 @@ def obtain_dependencies_ordered_for_execution(root_deps):
       dependency and not listed again);
     - No project is listed more than once;
 
-    :param list(Dep) root_deps: A list of the root projects.
-    :rtype: list(Dep)
+    :param root_deps: A list of the root projects.
     :return: A list of all projects target to execution.
     """
 
-    def count_deps(dep):
+    def count_deps(dep: Dep) -> int:
         """
         Count all dependencies (and sub dependencies) of the given dep.
-        :param Dep dep:
-        :rtype: int
         """
         already_visited = {dep.abspath}
-        other_deps = dep.deps[:]
+        other_deps = list(dep.deps)
         count = 0
         while other_deps:
             next_dep = other_deps.pop()
@@ -443,27 +429,22 @@ def obtain_dependencies_ordered_for_execution(root_deps):
     return [dep_element for dep_element, dep_count in deps]
 
 
-def format_command(command, dep):
+@overload
+def format_command(command: str, dep: Dep) -> str: ...
+@overload
+def format_command(command: list[str], dep: Dep) -> list[str]: ...
+
+
+def format_command(command: str | list[str], dep: Dep) -> str | list[str]:
     """
     Process the variables in command.
-
-    :type command: unicode | sequence(unicode)
-    :type dep: Dep
-
-    :rtype: unicode | list(unicode)
     """
     format_dict = {
         "name": dep.name,
         "abs": dep.abspath,
     }
 
-    def _format(s, format_dict):
-        """
-        :type s: unicode
-        :type format_dict: dict(unicode,unicode)
-
-        :rtype: unicode
-        """
+    def _format(s: str, format_dict: dict[str, str]) -> str:
         for key, item in format_dict.items():
             s = s.replace("{" + key + "}", item)
         return s
@@ -475,48 +456,48 @@ def format_command(command, dep):
 
 
 def execute_command_in_dependencies(
-    command,
-    dependencies,
-    required_files_filter=None,
-    dry_run=False,
-    verbose=False,
-    continue_on_failure=False,
-    here=False,
-    jobs=1,
-    jobs_unordered=False,
-):
+    command: str | list[str],
+    dependencies: list[Dep],
+    required_files_filter: Callable[..., bool] | None = None,
+    dry_run: bool = False,
+    verbose: bool = False,
+    continue_on_failure: bool = False,
+    here: bool = False,
+    jobs: int = 1,
+    jobs_unordered: bool = False,
+) -> Sequence[int]:
     """
     Execute the given command for the given dependencies.
 
-    :param list(unicode) command: The commando to be executed.
+    :param command: The commando to be executed.
 
-    :param list(Dep) dependencies: The list of dependencies for which execute the command.
+    :param dependencies: The list of dependencies for which execute the command.
 
-    :param callable required_files_filter: A list os files required in a dependency root directory
+    :param required_files_filter: A list os files required in a dependency root directory
         to execute the command.
 
-    :param bool dry_run: Does all the checks and most output normally but does not actually execute
+    :param dry_run: Does all the checks and most output normally but does not actually execute
         the command.
 
-    :param bool verbose: Prints extra information.
+    :param verbose: Prints extra information.
 
-    :param bool continue_on_failure: When this is `False` the first command with a non zero return
+    :param continue_on_failure: When this is `False` the first command with a non zero return
         code makes the dependency processing to stop and this function returns, when it is `True`
         all dependencies are always processed.
 
-    :param bool here: Does not change the working dir to the root of the dependency when executing
+    :param here: Does not change the working dir to the root of the dependency when executing
         the command.
 
-    :param int jobs: The number of concurrent jobs to be executed.
+    :param jobs: The number of concurrent jobs to be executed.
 
-    :param bool jobs_unordered: This only makes a difference if jobs > 1, in which case it'll be
+    :param jobs_unordered: This only makes a difference if jobs > 1, in which case it'll be
         able to run all jobs in parallel, without taking into account any pre-condition for the job
         to run (otherwise, it'll run jobs considering that its pre-requisites are ran first).
 
-    :rtype: list(int)
     :return: The exit code of the commands executed so far (may be smaller than `dependencies` list
         when `continue_on_failure` is false).
     """
+
     exit_codes = []
     error_messages = []
     initial = [x.name for x in dependencies]
@@ -524,14 +505,16 @@ def execute_command_in_dependencies(
     on_github = "GITHUB_WORKSPACE" in os.environ
     output_separator = "" if on_github else "\n" + "=" * MAX_LINE_LENGTH
 
+    executor: ThreadPoolExecutor | SynchronousExecutor
+
     if jobs > 1:
         buffer_output = True
         from concurrent.futures.thread import ThreadPoolExecutor
 
         executor = ThreadPoolExecutor(max_workers=jobs)
-        previously_added_to_batch = set()
+        previously_added_to_batch = set[Dep]()
 
-        def calculate_next_batch(dependencies):
+        def calculate_next_batch(dependencies: list[Dep]) -> list[Dep]:
             next_batch = []
             if jobs_unordered:
                 next_batch.extend(dependencies)
@@ -565,11 +548,10 @@ def execute_command_in_dependencies(
             return next_batch
 
     else:
-        from ._synchronous_executor import SynchronousExecutor
 
         executor = SynchronousExecutor()
 
-        def calculate_next_batch(dependencies):
+        def calculate_next_batch(dependencies: list[Dep]) -> list[Dep]:
             # The next is the first one in the list.
             return [dependencies.pop(0)]
 
@@ -616,7 +598,7 @@ def execute_command_in_dependencies(
                 click.secho(" skipped", fg="magenta", color=_click_echo_color)
                 continue
 
-            if not required_files_filter(dep, quiet=False):
+            if required_files_filter and not required_files_filter(dep, quiet=False):
                 continue
 
             formatted_command = format_command(command, dep)
@@ -641,7 +623,7 @@ def execute_command_in_dependencies(
 
             if not dry_run:
                 dep_to_future[dep] = executor.submit(
-                    execute, formatted_command, working_dir, buffer_output
+                    execute, list(formatted_command), working_dir, buffer_output
                 )
 
             first = False
@@ -667,16 +649,10 @@ def execute_command_in_dependencies(
             if buffer_output:
                 if stdout:
                     click.secho("=== STDOUT ===")
-
-                    if type(stdout) is not str:
-                        stdout = stdout.decode("utf-8", errors="replace")
-
                     click.secho(stdout)
 
                 if stderr:
                     click.secho("=== STDERR ===", fg="red", bold=True)
-                    if type(stderr) is not str:
-                        stderr = stderr.decode("utf-8", errors="replace")
                     click.secho(stderr, fg="red", bold=True)
 
             if verbose:
@@ -722,21 +698,25 @@ def execute_command_in_dependencies(
     return exit_codes
 
 
-def execute(formatted_command, working_dir, buffer_output=False):
+def execute(
+    formatted_command: list[str],
+    working_dir: str | Path | None,
+    buffer_output: bool = False,
+) -> tuple[int, str, str, float]:
     """
     Actually executes some command in the given working directory.
 
-    :param list(unicode) formatted_command:
+    :param formatted_command:
         A list with the commands to be executed.
 
-    :param unicode working_dir:
+    :param working_dir:
         The working directory for the command.
 
-    :param bool buffer_output:
+    :param buffer_output:
         Whether the output of the command should be buffered and returned or just printed
         directly.
 
-    :return tuple(int, unicode, unicode, float):
+    :return:
         A tuple with (returncode, stdout, stderr, time to execute command).
     """
     if not sys.platform.startswith("win"):
@@ -843,22 +823,22 @@ def execute(formatted_command, working_dir, buffer_output=False):
     "order is important.",
 )
 def cli(
-    command,
-    project,
-    pretty_print,
-    require_file,
-    here,
-    dry_run,
-    verbose,
-    continue_on_failure,
-    ignore_project,
-    skip_project,
-    force_color,
-    repos,
-    jobs,
-    jobs_unordered,
-    deps_reversed,
-):
+    command: str | list[str],
+    project: list[str],
+    pretty_print: bool,
+    require_file: str,
+    here: bool,
+    dry_run: bool,
+    verbose: bool,
+    continue_on_failure: bool,
+    ignore_project: list[str],
+    skip_project: list[str],
+    force_color: bool,
+    repos: bool,
+    jobs: int,
+    jobs_unordered: bool,
+    deps_reversed: bool,
+) -> int:
     """
     Program to list development dependencies of `conda-devenv` projects, or to execute a command
     for each dependency.
@@ -935,11 +915,8 @@ def cli(
             pretty_print_dependency_tree(root_deps)
             return 0
 
-        def required_files_filter(dependency, quiet):
+        def required_files_filter(dependency: Dep, quiet: bool) -> bool:
             """
-            :type dependency: Dep
-            :type quiet: bool
-
             :return: `True` if the necessary files/folders are present, `False` otherwise.
             """
             for f in require_file:
@@ -996,7 +973,7 @@ def cli(
 
 
 @contextmanager
-def setup_deps_work_dir():
+def setup_deps_work_dir() -> Iterator[None]:
     """
     Manages the `DEPS_WORK_DIR` directory.
     """
@@ -1013,19 +990,20 @@ def setup_deps_work_dir():
             del os.environ["DEPS_WORK_DIR"]
 
 
-def shell_execute(command, cwd, buffer_output=False):
+def shell_execute(
+    command: str | list[str], cwd: str | Path | None, buffer_output: bool = False
+) -> tuple[subprocess.Popen[str], str, str, float]:
     """
     Wrapper function the execute the command.
     This function exists solely to be overwritten on tests since subprocess output is not captured
     by the `click.testing.CliRunner`, in the wild the processes' output could be very large so
     piping is not an option.
 
-    :type command: unicode | list(unicode)
 
-    :param bool buffer_output:
-        If True the output of the process in piped and properly returned afterwards.
+    :param buffer_output:
+        If True the output of the process in piped and properly returned afterward.
 
-    :return tuple(subprocess.Popen, unicode, unicode, float):
+    :return:
         Return tuple with the process object used to run the command, stdout, stderr, time to execute.
     """
     import time
@@ -1035,19 +1013,24 @@ def shell_execute(command, cwd, buffer_output=False):
     # http://stackoverflow.com/questions/13243807/popen-waiting-for-child-process-even-when-the-immediate-child-has-terminated/13256908#13256908
     if buffer_output:
         process = subprocess.Popen(
-            command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, cwd=cwd
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            shell=True,
+            cwd=cwd,
+            text=True,
         )
     else:
-        process = subprocess.Popen(command, shell=True, cwd=cwd)
+        process = subprocess.Popen(command, shell=True, cwd=cwd, text=True)
     stdout, stderr = process.communicate()
     return process, stdout, stderr, time.time() - curtime
 
 
-def main_func():
+def main_func() -> int:
     """
     A wrapper to call the click command with the desired parameters.
     """
-    return cli(auto_envvar_prefix="DEPS")
+    return int(cli(auto_envvar_prefix="DEPS"))
 
 
 if __name__ == "__main__":
