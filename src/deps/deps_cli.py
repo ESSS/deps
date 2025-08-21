@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import functools
 import os
 import platform
@@ -6,20 +7,18 @@ import subprocess
 import sys
 import textwrap
 from collections import OrderedDict
-from collections.abc import Sequence, Iterator, Callable
-from concurrent.futures.thread import ThreadPoolExecutor
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
-from ._synchronous_executor import SynchronousExecutor
-import importlib_metadata
+
 import click
+import importlib_metadata
 from typing_extensions import overload
 
-click.disable_unicode_literals_warning = True
-
+from ._synchronous_executor import SynchronousExecutor
 
 PROG_NAME = "deps"
 PROG_MSG_PREFIX = PROG_NAME + ": "
@@ -69,13 +68,14 @@ def get_shallow_dependencies(
     base_directory: str, filename: str | None = None
 ) -> Sequence[tuple[str, str]]:
     """
-    :param unicode base_directory:
-    The project's root directory.
-    :param unicode filename:
-    The environment definition file name. If `None` (or omitted) `FILE_WITH_DEPENDENCIES` is used.
-    :rtype: list(unicode)
-    :return: The first level (does not recursively list dependencies of dependencies) dependencies
-    of the project rooted in the given directory
+    :param base_directory:
+        The project's root directory.
+    :param filename:
+        The environment definition file name. If `None` (or omitted)
+        `FILE_WITH_DEPENDENCIES` is used.
+    :return:
+        The first level (does not recursively list dependencies of dependencies)
+        dependencies of the project rooted in the given directory.
     """
     import jinja2
     import yaml
@@ -86,7 +86,7 @@ def get_shallow_dependencies(
     # NOTE: From [conda-devenv](https://conda-devenv.readthedocs.io/en/latest/usage.html#jinja2)
     jinja_args = {"root": base_directory, "os": os, "sys": sys, "platform": platform}
 
-    with open(os.path.join(base_directory, filename), "r") as f:
+    with open(os.path.join(base_directory, filename)) as f:
         yaml_contents = jinja2.Template(f.read()).render(**jinja_args)
 
     data = yaml.safe_load(yaml_contents) or {}
@@ -105,9 +105,7 @@ class Dep:
     ignored: bool
     skipped: bool
 
-    # # Overridden to make identity compares (unlike namedtuple which would compare the contents). In
-    # # practice, this is needed because the deps is a list, so, Dep couldn't be used as a dict key
-    # # or in a set.
+    # Overridden to make identity compares.
     def __hash__(self) -> int:
         return id(self)
 
@@ -156,9 +154,7 @@ def pretty_print_dependency_tree(root_deps: list[Dep]) -> None:
     )
     print(legend)
 
-    def print_formatted_dep(
-        name: str, indentation: str, name_template: str = "{}"
-    ) -> None:
+    def print_formatted_dep(name: str, indentation: str, name_template: str = "{}") -> None:
         print(indentation + name_template.format(name))
 
     def print_deps(
@@ -222,9 +218,7 @@ def find_directories(raw_directories: list[str]) -> list[str]:
     for raw_dir in raw_directories:
         directory = find_ancestor_dir_with(FILE_WITH_DEPENDENCIES, raw_dir)
         if directory is None:
-            msg = 'could not find "{}" for "{}".'.format(
-                FILE_WITH_DEPENDENCIES, raw_dir
-            )
+            msg = f'could not find "{FILE_WITH_DEPENDENCIES}" for "{raw_dir}".'
             echo_error(msg)
             raise click.ClickException(msg)
         directories.append(directory)
@@ -329,7 +323,7 @@ def obtain_repos(dep_list: list[Dep]) -> list[Dep]:
         # will make repo normal; if any project is skipped, repo is skipped unless there is a
         # normal project; repo only ignored if all projects are ignored.
         precedence = {}
-        for i, repo_dep in enumerate(list_of_repos):
+        for repo_dep in list_of_repos:
             if repo_dep.name not in precedence:
                 precedence[repo_dep.name] = repo_dep
 
@@ -524,11 +518,7 @@ def execute_command_in_dependencies(
                 for i, dep in reversed(list(enumerate(dependencies))):
                     for depends_on in get_abs_path_to_dep_for_all_deps(dep).values():
                         if depends_on not in previously_added_to_batch:
-                            msg.append(
-                                "{} still depending on: {}".format(
-                                    dep.name, depends_on.name
-                                )
-                            )
+                            msg.append(f"{dep.name} still depending on: {depends_on.name}")
                             break
                     else:
                         next_batch.append(dependencies.pop(i))
@@ -548,7 +538,6 @@ def execute_command_in_dependencies(
             return next_batch
 
     else:
-
         executor = SynchronousExecutor()
 
         def calculate_next_batch(dependencies: list[Dep]) -> list[Dep]:
@@ -565,9 +554,7 @@ def execute_command_in_dependencies(
         print_str = ", ".join(dep.name for dep in deps)
         for dep in deps:
             if len(deps) == 1 or first:
-                click.secho(
-                    output_separator, fg="black", bold=True, color=_click_echo_color
-                )
+                click.secho(output_separator, fg="black", bold=True, color=_click_echo_color)
 
             # Checks before execution.
             if dep.ignored:
@@ -614,9 +601,7 @@ def execute_command_in_dependencies(
                 else:
                     click.secho(msg, fg="blue", bold=True, color=_click_echo_color)
             if verbose or dry_run:
-                command_to_print = " ".join(
-                    arg.replace(" ", "\\ ") for arg in formatted_command
-                )
+                command_to_print = " ".join(arg.replace(" ", "\\ ") for arg in formatted_command)
                 echo_verbose_msg("executing: " + command_to_print)
                 if working_dir:
                     echo_verbose_msg("from:      " + working_dir)
@@ -641,7 +626,7 @@ def execute_command_in_dependencies(
             exit_codes.append(returncode)
 
             click.secho(
-                "Finished: {} in {:.2f}s".format(dep.name, command_time),
+                f"Finished: {dep.name} in {command_time:.2f}s",
                 fg="white",
                 bold=False,
                 color=_click_echo_color,
@@ -657,14 +642,12 @@ def execute_command_in_dependencies(
 
             if verbose:
                 if jobs > 1:
-                    echo_verbose_msg(
-                        "return code for project {}: {}".format(dep.name, returncode)
-                    )
+                    echo_verbose_msg(f"return code for project {dep.name}: {returncode}")
                 else:
-                    echo_verbose_msg("return code: {}".format(returncode))
+                    echo_verbose_msg(f"return code: {returncode}")
 
             if returncode != 0:
-                error_msg = "Command failed (project: {})".format(dep.name)
+                error_msg = f"Command failed (project: {dep.name})"
                 error_messages.append(error_msg)
                 echo_error(error_msg)
 
@@ -733,8 +716,8 @@ def execute(
     else:
         cwd = os.path.expanduser(working_dir)
         if not os.path.exists(cwd):
-            sys.stderr.write("Error: {} does not exist.\n".format(cwd))
-            return 1, "", "Error: {} does not exist.\n".format(cwd), 0
+            sys.stderr.write(f"Error: {cwd} does not exist.\n")
+            return 1, "", f"Error: {cwd} does not exist.\n", 0
 
     process, stdout, stderr, command_time = shell_execute(command, cwd, buffer_output)
     return process.returncode, stdout, stderr, command_time
@@ -751,9 +734,7 @@ def execute(
     multiple=True,
     help="Project to find dependencies of (can be used multiple times).",
 )
-@click.option(
-    "--pretty-print", "-pp", is_flag=True, help="Pretty print dependencies in a tree."
-)
+@click.option("--pretty-print", "-pp", is_flag=True, help="Pretty print dependencies in a tree.")
 @click.option(
     "--require-file",
     "-f",
@@ -790,8 +771,9 @@ def execute(
     type=click.Path(),
     multiple=True,
     envvar="DEPS_SKIP_PROJECT",
-    help="Project name to skip execution but still look for its dependencies. Instead of passing this option an "
-    "environment variable with the name DEPS_SKIP_PROJECT can be used (can be used multiple times).",
+    help="Project name to skip execution but still look for its dependencies. Instead of passing "
+    "this option an environment variable with the name DEPS_SKIP_PROJECT can be used "
+    "(can be used multiple times).",
 )
 @click.option(
     "--force-color/--no-force-color",
@@ -807,9 +789,7 @@ def execute(
     help="Instead of projects the enumeration procedure will use the containing repositories"
     " instead of projects them selves",
 )
-@click.option(
-    "--jobs", "-j", default=1, help="Run commands in parallel using multiple processes"
-)
+@click.option("--jobs", "-j", default=1, help="Run commands in parallel using multiple processes")
 @click.option(
     "--jobs-unordered",
     is_flag=True,
@@ -819,8 +799,8 @@ def execute(
 @click.option(
     "--deps-reversed",
     is_flag=True,
-    help="Will run with a reversed dependency (only used if --jobs=1). Useful to identify where the "
-    "order is important.",
+    help="Will run with a reversed dependency (only used if --jobs=1). Useful to identify where "
+    "the order is important.",
 )
 def cli(
     command: str | list[str],
@@ -904,9 +884,7 @@ def cli(
 
         directories = find_directories(project)
 
-        root_deps = obtain_all_dependencies_recursively(
-            directories, ignore_project, skip_project
-        )
+        root_deps = obtain_all_dependencies_recursively(directories, ignore_project, skip_project)
         if repos:
             root_deps = obtain_repos(root_deps)
 
@@ -920,12 +898,8 @@ def cli(
             :return: `True` if the necessary files/folders are present, `False` otherwise.
             """
             for f in require_file:
-                file_to_check = os.path.join(
-                    dependency.abspath, format_command(f, dependency)
-                )
-                if not os.path.isfile(file_to_check) and not os.path.isdir(
-                    file_to_check
-                ):
+                file_to_check = os.path.join(dependency.abspath, format_command(f, dependency))
+                if not os.path.isfile(file_to_check) and not os.path.isdir(file_to_check):
                     if not quiet:
                         msg = '{}: skipping since "{}" does not exist'
                         msg = msg.format(dependency.name, file_to_check)
@@ -942,9 +916,7 @@ def cli(
             deps_to_output = [
                 dep.name
                 for dep in deps_in_order
-                if not dep.ignored
-                and not dep.skipped
-                and required_files_filter(dep, quiet=True)
+                if not dep.ignored and not dep.skipped and required_files_filter(dep, quiet=True)
             ]
             print("\n".join(deps_to_output))
             return 0
@@ -963,7 +935,7 @@ def cli(
                 jobs_unordered=jobs_unordered,
             )
 
-        click.secho("Total time: {:.2f}s".format(time.time() - initial_time))
+        click.secho(f"Total time: {time.time() - initial_time:.2f}s")
 
         execution_return = sorted(execution_return, key=abs)
         sys.exit(execution_return[-1] if execution_return else 1)
@@ -977,12 +949,10 @@ def setup_deps_work_dir() -> Iterator[None]:
     """
     Manages the `DEPS_WORK_DIR` directory.
     """
-    # Prefer the GHA runner temporary directory if available, if not, fallback to the default temporary directory
-    # by passing None.
+    # Prefer the GHA runner temporary directory if available, if not, fallback to the
+    # default temporary directory by passing None.
     dir = os.environ.get("RUNNER_TEMP")
-    with TemporaryDirectory(
-        prefix="deps-", dir=dir, ignore_cleanup_errors=True
-    ) as tmpdir:
+    with TemporaryDirectory(prefix="deps-", dir=dir, ignore_cleanup_errors=True) as tmpdir:
         os.environ["DEPS_WORK_DIR"] = tmpdir
         try:
             yield
@@ -1004,7 +974,8 @@ def shell_execute(
         If True the output of the process in piped and properly returned afterward.
 
     :return:
-        Return tuple with the process object used to run the command, stdout, stderr, time to execute.
+        Return tuple with the process object used to run the command, stdout, stderr,
+        time to execute.
     """
     import time
 

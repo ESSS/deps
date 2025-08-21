@@ -1,7 +1,6 @@
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock
 
 import pytest
 from click.testing import CliRunner
@@ -19,12 +18,11 @@ def cli_runner() -> Iterator[CliRunner]:
 
 @pytest.fixture
 def piped_shell_execute(mocker: MockerFixture) -> None:
-    import click
     import subprocess
 
-    def _piped_shell_execute(
-        command: str, cwd: str | Path, buffer_output: bool = False
-    ) -> Any:
+    import click
+
+    def _piped_shell_execute(command: str, cwd: str | Path, buffer_output: bool = False) -> Any:
         # This version always makes the pipe regardless of the buffer_output value and always
         # redirects everything for stdout.
         process = subprocess.Popen(

@@ -2,7 +2,6 @@ import os
 import stat
 import sys
 import textwrap
-from builtins import str
 from pathlib import Path
 from typing import Any
 
@@ -49,18 +48,13 @@ def project_tree(tmp_path_factory: pytest.TempPathFactory) -> Path:
         proj_path = proj.split("/")
         proj_dir = test_projects.joinpath(*proj_path)
         proj_dir.mkdir(parents=True, exist_ok=True)
-        test_projects.joinpath(proj_path[0], ".git").mkdir(
-            exist_ok=True
-        )  # Fake git repo.
+        test_projects.joinpath(proj_path[0], ".git").mkdir(exist_ok=True)  # Fake git repo.
         env_yml = proj_dir.joinpath("environment.devenv.yml")
-        env_content = ["name: {}".format(proj), ""]
+        env_content = [f"name: {proj}", ""]
         if len(deps) > 0:
             env_content.append("includes:")
             env_content.extend(
-                [
-                    "  - {{{{ root }}}}/../{}/environment.devenv.yml".format(dep)
-                    for dep in deps
-                ]
+                [f"  - {{{{ root }}}}/../{dep}/environment.devenv.yml" for dep in deps]
             )
             env_content.append("")
         env_yml.write_text("\n".join(env_content))
@@ -252,7 +246,7 @@ def test_here_flag(
 def test_multiple_projects(cli_runner: CliRunner, project_tree: Path) -> None:
     projects = ["root_a", "root_b"]
     projects = [str(project_tree.joinpath(name)) for name in projects]
-    command_args = [("--project={}".format(project)) for project in projects]
+    command_args = [(f"--project={project}") for project in projects]
     result = cli_runner.invoke(deps_cli.cli, command_args)
     assert result.exit_code == 0, result.output
     assert result.output == textwrap.dedent(
@@ -392,10 +386,9 @@ def test_ignore_projects(
     project_tree: Path,
     piped_shell_execute: None,
 ) -> None:
-
     def configure_ignored_projects() -> None:
         if use_env_var:
-            extra_env["DEPS_IGNORE_PROJECT"] = str("dep_a.1{}dep_z".format(os.pathsep))
+            extra_env["DEPS_IGNORE_PROJECT"] = str(f"dep_a.1{os.pathsep}dep_z")
         else:
             command_args.insert(0, "--ignore-project=dep_a.1")
             command_args.insert(1, "--ignore-project=dep_z")
@@ -448,10 +441,9 @@ def test_skip_projects(
     project_tree: Path,
     piped_shell_execute: None,
 ) -> None:
-
     def configure_skipped_projects() -> None:
         if use_env_var:
-            extra_env["DEPS_SKIP_PROJECT"] = str("dep_a.1{}dep_z".format(os.pathsep))
+            extra_env["DEPS_SKIP_PROJECT"] = str(f"dep_a.1{os.pathsep}dep_z")
         else:
             command_args.insert(0, "--skip-project=dep_a.1")
             command_args.insert(1, "--skip-project=dep_z")
@@ -510,7 +502,6 @@ def test_conflict_ignore_skip_projects(
     project_tree: Path,
     piped_shell_execute: None,
 ) -> None:
-
     def configure_skipped_projects() -> None:
         if use_env_var:
             extra_env["DEPS_SKIP_PROJECT"] = "dep_a.1"
@@ -556,9 +547,7 @@ def test_conflict_ignore_skip_projects(
     )
 
 
-def test_require_file(
-    cli_runner: CliRunner, project_tree: Path, piped_shell_execute: None
-) -> None:
+def test_require_file(cli_runner: CliRunner, project_tree: Path, piped_shell_execute: None) -> None:
     root_b = str(project_tree.joinpath("root_b"))
     base_args = ["-p", root_b, "--require-file", "tasks/asd"]
 
@@ -664,9 +653,7 @@ def test_continue_on_failure(
     assert "deps: error: Command failed" not in result.output
 
 
-def test_list_repos(
-    cli_runner: CliRunner, project_tree: Path, piped_shell_execute: None
-) -> None:
+def test_list_repos(cli_runner: CliRunner, project_tree: Path, piped_shell_execute: None) -> None:
     root = str(project_tree.joinpath("root_c"))
     base_args = ["-p", root, "--repos"]
 
@@ -980,10 +967,10 @@ def test_no_expected_env_file(
         proj_dir = test_projects.joinpath(*proj_path)
         proj_dir.mkdir(parents=True, exist_ok=True)
         env_yml = proj_dir.joinpath(env_filename)
-        env_content = ["name: {}".format(proj), ""]
+        env_content = [f"name: {proj}", ""]
         if len(deps) > 0:
             env_content.append("includes:")
-            env_content.extend(["  - {{{{ root }}}}/{}".format(dep) for dep in deps])
+            env_content.extend([f"  - {{{{ root }}}}/{dep}" for dep in deps])
             env_content.append("")
         env_yml.write_text("\n".join(env_content))
 
