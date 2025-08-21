@@ -10,6 +10,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  UV_LOCKED: "1"
+
 jobs:
 
   test:
@@ -22,28 +25,15 @@ jobs:
         os: [ubuntu-latest, windows-latest]
 
     steps:
-    - uses: actions/checkout@v2
-    - name: Setup conda
-      uses: s-weigand/setup-conda@v1
-      with:
-        update-conda: true
-        python-version: "3.10"
-        conda-channels: anaconda, conda-forge
-
-    - name: conda-devenv
+    - uses: actions/checkout@v4
+    - name: Install uv
+      uses: astral-sh/setup-uv@v6
+    - name: Test
       run: |
-        conda install conda-devenv --quiet
-        conda devenv  --quiet
-
-    - name: Test (Linux)
-      if: ${{ runner.os == 'Linux' }}
+        uv run pytest
+        uv run deps --help
+    - name: Test Build
+      shell: bash
       run: |
-        source activate deps
-        python -m pytest source/python
-
-    - name: Test (Windows)
-      if: ${{ runner.os == 'Windows' }}
-      shell: cmd
-      run: |
-        activate deps
-        python -m pytest source/python
+        uv build
+        uvx --with `find dist/*.whl` deps --help

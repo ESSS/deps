@@ -1,9 +1,14 @@
+from collections.abc import Iterator
+from pathlib import Path
+from typing import Any
+
 import pytest
 from click.testing import CliRunner
+from pytest_mock import MockerFixture
 
 
 @pytest.yield_fixture
-def cli_runner():
+def cli_runner() -> Iterator[CliRunner]:
     """
     Fixture used to test click applications.
     :rtype: click.testing.CliRunner
@@ -12,11 +17,12 @@ def cli_runner():
 
 
 @pytest.fixture
-def piped_shell_execute(mocker):
-    import click
+def piped_shell_execute(mocker: MockerFixture) -> None:
     import subprocess
 
-    def _piped_shell_execute(command, cwd, buffer_output=False):
+    import click
+
+    def _piped_shell_execute(command: str, cwd: str | Path, buffer_output: bool = False) -> Any:
         # This version always makes the pipe regardless of the buffer_output value and always
         # redirects everything for stdout.
         process = subprocess.Popen(
@@ -24,15 +30,14 @@ def piped_shell_execute(mocker):
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             shell=True,
+            text=True,
             cwd=cwd,
         )
         stdout, stderr = process.communicate()
-        stdout = stdout.decode()
         click.secho(stdout)
         return process, stdout, stderr, 0
 
-    shell_execute = mocker.patch(
+    mocker.patch(
         "deps.deps_cli.shell_execute",
         new=_piped_shell_execute,
     )
-    return shell_execute
