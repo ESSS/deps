@@ -1,4 +1,4 @@
-1.5.0 (UNRELEASED)
+1.5.0 (2025-08-22)
 ------------------
 
 * `pixi-devenv <https://github.com/ESSS/pixi-devenv>` support added.
