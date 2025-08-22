@@ -17,6 +17,7 @@ dependencies = [
     "importlib-metadata>=8.7.0",
     "jinja2>=3.1",
     "pyyaml>=6.0.2",
+    "tomli>=2.2.1",
     "typing_extensions",
 ]
 
@@ -50,6 +51,7 @@ extend-select = [
     "UP",  # pyupgrade.
 ]
 ignore = [
+    "B011",  # Do not `assert False`
     "E501",  # Line too long
     "PLC0415", # `import` should be at the top-level of a file
     "PLR",  # Heuristics from pylint.

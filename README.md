@@ -6,8 +6,8 @@
 
 Deps is a utility to execute commands on multiple projects.
 
-It is meant to be used along with `conda devenv`: https://github.com/ESSS/conda-devenv, as such,
-it reads the contents of the `includes` sections of `environment.devenv.yml`, which contains
+It is meant to be used along with [conda devenv](https://github.com/ESSS/conda-devenv) and [pixi-devenv](https://github.com/ESSS/pixi-devenv), as such,
+it reads the contents of the `includes` sections of the `environment.devenv.yml` / `pixi.devenv.toml`, which contain
 the relative paths of the dependencies where commands should be executed.
 
 # Examples

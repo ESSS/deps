@@ -12,11 +12,11 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any
+from typing import Any, NoReturn
 
 import click
 import importlib_metadata
-from typing_extensions import overload
+from typing_extensions import Self, overload
 
 from ._synchronous_executor import SynchronousExecutor
 
@@ -56,45 +56,68 @@ def echo_error(*args: Any, **kwargs: Any) -> None:
     click.secho(*args, **kwargs)
 
 
-# ==================================================================================================
-# Customizations
-# ==================================================================================================
-
-FILE_WITH_DEPENDENCIES = "environment.devenv.yml"
+DEVENV_FILES = ("environment.devenv.yml", "pixi.devenv.toml")
 
 
 @functools.cache
-def get_shallow_dependencies(
-    base_directory: str, filename: str | None = None
-) -> Sequence[tuple[str, str]]:
+def get_shallow_dependencies(dev_env_file: Path) -> Sequence[Path]:
     """
-    :param base_directory:
-        The project's root directory.
-    :param filename:
-        The environment definition file name. If `None` (or omitted)
-        `FILE_WITH_DEPENDENCIES` is used.
+    :param dev_env_file:
+        The environment definition file name.
     :return:
         The first level (does not recursively list dependencies of dependencies)
         dependencies of the project rooted in the given directory.
     """
-    import jinja2
-    import yaml
+    match dev_env_file.suffix:
+        case ".yml":
+            import jinja2
+            import yaml
 
-    if filename is None:
-        filename = FILE_WITH_DEPENDENCIES
+            # NOTE: From [conda-devenv](https://conda-devenv.readthedocs.io/en/latest/usage.html#jinja2)
+            jinja_args = {
+                "root": str(dev_env_file.parent),
+                "os": os,
+                "sys": sys,
+                "platform": platform,
+            }
 
-    # NOTE: From [conda-devenv](https://conda-devenv.readthedocs.io/en/latest/usage.html#jinja2)
-    jinja_args = {"root": base_directory, "os": os, "sys": sys, "platform": platform}
+            yaml_contents = jinja2.Template(dev_env_file.read_text(encoding="UTF-8")).render(
+                **jinja_args
+            )
 
-    with open(os.path.join(base_directory, filename)) as f:
-        yaml_contents = jinja2.Template(f.read()).render(**jinja_args)
+            data = yaml.safe_load(yaml_contents) or {}
+            if not data.get("includes"):
+                return []
+            return [Path(os.path.abspath(p)) for p in data["includes"]]
+        case ".toml":
+            import tomli
 
-    data = yaml.safe_load(yaml_contents) or {}
-    if not data.get("includes"):
-        return []
-    includes = [os.path.abspath(p) for p in data["includes"]]
-    includes = [(os.path.dirname(p), os.path.basename(p)) for p in includes]
-    return includes
+            data = tomli.loads(dev_env_file.read_text(encoding="UTF-8"))
+            if not data.get("includes"):
+                return []
+
+            def get_relative_path(entry: str | dict[str, str]) -> str:
+                """Include entries have two possible formats:
+
+                includes = [
+                    "../core",
+                    { path = "../calc" },
+                ]
+                """
+                if isinstance(entry, dict):
+                    return entry["path"]
+                else:
+                    return entry
+
+            return [
+                Path(os.path.abspath(dev_env_file.parent / get_relative_path(p)))
+                / "pixi.devenv.toml"
+                for p in data["includes"]
+            ]
+        case ext:  # pragma: no cover
+            msg = f"Cannot parse files with extension {ext}"
+            echo_error(msg)
+            raise click.ClickException(msg)
 
 
 @dataclass(eq=False)
@@ -102,7 +125,17 @@ class Dep:
     name: str
     abspath: str
     deps: list[Dep]
+
+    # Ignored projects:
+    # * Won't have commands executed in their root.
+    # * Dependencies are ignored.
     ignored: bool
+
+    # Skipped projects:
+    # * Won't have commands executed in their root.
+    # * Their dependencies are considered to be part of the hierarchy.
+    #
+    # `ignored` has higher priority than skipped, so if a project is skipped and ignored it is considered ignored.
     skipped: bool
 
     # Overridden to make identity compares.
@@ -112,27 +145,29 @@ class Dep:
     def __eq__(self, o: object) -> bool:
         return o is self
 
+    @classmethod
+    def from_directory(
+        cls, directory: str | Path, ignore_projects: list[str], skipped_projects: list[str]
+    ) -> Self:
+        """
+        :param directory:
+            Root directory of a project.
 
-def create_new_dep_from_directory(
-    directory: str | Path, ignore_projects: list[str], skipped_projects: list[str]
-) -> Dep:
-    """
-    :param directory: Root directory of a project.
-    :param ignore_projects: A list of project names to ignore (set the `ignored` attr
-    to `True`).
-    :param skipped_projects: A list of project names that should be skipped i.e. they
-    are part of dependencies but they aren't executed. Skipped has less priority than ignored, so
-    if a name is in both lists it will be always ignored.
-    """
-    directory = os.path.abspath(directory)
-    name = os.path.split(directory)[1]
-    return Dep(
-        name=name,
-        abspath=directory,
-        deps=[],
-        ignored=name in ignore_projects,
-        skipped=name in skipped_projects,
-    )
+        :param ignore_projects:
+            A list of project names to ignore (sets `ignored` to `True` if this Dep is in that list).
+
+        :param skipped_projects:
+            A list of project names to skip (sets `skipped` to `True` if this Dep is in that list).
+        """
+        directory = os.path.abspath(directory)
+        name = os.path.basename(directory)
+        return cls(
+            name=name,
+            abspath=directory,
+            deps=[],
+            ignored=name in ignore_projects,
+            skipped=name in skipped_projects,
+        )
 
 
 def pretty_print_dependency_tree(root_deps: list[Dep]) -> None:
@@ -216,11 +251,12 @@ def find_directories(raw_directories: list[str]) -> list[str]:
     directories = []
 
     for raw_dir in raw_directories:
-        directory = find_ancestor_dir_with(FILE_WITH_DEPENDENCIES, raw_dir)
-        if directory is None:
-            msg = f'could not find "{FILE_WITH_DEPENDENCIES}" for "{raw_dir}".'
-            echo_error(msg)
-            raise click.ClickException(msg)
+        for dev_env_base_name in DEVENV_FILES:
+            directory = find_ancestor_dir_with(dev_env_base_name, raw_dir)
+            if directory is not None:
+                break
+        else:
+            _error_could_not_find_dev_env_files(raw_dir)
         directories.append(directory)
 
     return directories
@@ -246,40 +282,47 @@ def obtain_all_dependencies_recursively(
     all_deps = {}
 
     def add_deps_from_directories(
-        directories: Sequence[tuple[str, str | None]], list_to_add_deps: list[Dep]
+        dev_env_files: Sequence[Path], list_to_add_deps: list[Dep]
     ) -> None:
         """
-        A data structure (`Dep`) is created for each project rooted in the given directories.
-
-        :param sequence(tuple(unicode,unicode)) directories: Projects' roots to use.
-        :param list(Dep) list_to_add_deps: A list to be populated with the created `Dep`s
-        processed `Dep`s (in case multiple projects have the same dependency).
+        Create `Dep` for each devenv file found, recursively, and add them to `list_to_add_deps`.
         """
-        for dep_directory, dep_env_filename in directories:
+        for dev_env_file in dev_env_files:
+            dep_directory = dev_env_file.parent
             if dep_directory not in all_deps:
-                dep = create_new_dep_from_directory(
-                    dep_directory, ignored_projects, skipped_projects
-                )
+                dep = Dep.from_directory(dep_directory, ignored_projects, skipped_projects)
                 all_deps[dep_directory] = dep
                 if not dep.ignored:
-                    current_dep_directories = get_shallow_dependencies(
-                        dep_directory, dep_env_filename
-                    )
+                    current_dep_directories = get_shallow_dependencies(dev_env_file)
                     add_deps_from_directories(current_dep_directories, dep.deps)
             else:
                 dep = all_deps[dep_directory]
             list_to_add_deps.append(dep)
 
+    def get_dev_env_file(dir: Path) -> Path:
+        for base_name in DEVENV_FILES:
+            p = dir / base_name
+            if p.is_file():
+                return p
+        _error_could_not_find_dev_env_files(dir)
+
     root_deps: list[Dep] = []
-    add_deps_from_directories([(p, None) for p in root_directories], root_deps)
+    add_deps_from_directories([get_dev_env_file(Path(p)) for p in root_directories], root_deps)
     return root_deps
+
+
+def _error_could_not_find_dev_env_files(path: str | Path) -> NoReturn:
+    files = '(' + ', '.join(f'"{x}"' for x in DEVENV_FILES) + ')'
+    msg = f'could not find one of {files} for "{path}".'
+    echo_error(msg)
+    raise click.ClickException(msg)
 
 
 def obtain_repos(dep_list: list[Dep]) -> list[Dep]:
     """
     Obtain the repos for the given projects and their dependencies.
     """
-    all_repos: dict[tuple[str | None, bool], Dep] = {}
+    all_repos: dict[tuple[str, bool], Dep] = {}
 
     def obtain_repo_from_dep(dep: Dep) -> Dep:
         """
