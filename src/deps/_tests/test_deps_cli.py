@@ -2,6 +2,8 @@ import os
 import stat
 import sys
 import textwrap
+from collections.abc import Sequence
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -21,9 +23,81 @@ def cleanup_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("GITHUB_WORKSPACE", raising=False)
 
 
+class Flavor(Enum):
+    Conda = "conda"
+    Pixi = "pixi"
+
+
+def get_devenv_filename(flavor: Flavor) -> str:
+    """Return the standard devenv file name for the given flavor."""
+    match flavor:
+        case Flavor.Conda:
+            return "environment.devenv.yml"
+        case Flavor.Pixi:
+            return "pixi.devenv.toml"
+        case flavor:
+            assert False, f"unknown flavor: {flavor}"
+
+
+def create_devenv_file(
+    flavor: Flavor, root_dir: Path, relative_paths_to_root: Sequence[str] | None
+) -> Path:
+    """Create a devenv file of the given favor, using the given relative paths.
+
+    The `relative_paths_to_root` parameter must contain only the directories that are included, without
+    the name of the devenv file, for example: `["../ben10"]`.
+
+    If `relative_paths_to_root` is None, the `includes` section is not added at all, as opposed
+    to being added as an empty list if `relative_paths_to_root` is an empty sequence.
+    """
+    match flavor:
+        case Flavor.Conda:
+            env_yml = root_dir / get_devenv_filename(flavor)
+            env_content = []
+            if relative_paths_to_root is not None:
+                env_content.append("includes:")
+                env_content.extend(
+                    [
+                        f"  - {{{{ root }}}}/{p}/environment.devenv.yml"
+                        for p in relative_paths_to_root
+                    ]
+                )
+                env_content.append("")
+            env_yml.write_text("\n".join(env_content))
+            return env_yml
+        case Flavor.Pixi:
+            toml_path = root_dir / get_devenv_filename(flavor)
+            env_content = []
+            if relative_paths_to_root is not None:
+                env_content.append("includes = [")
+                # Use the extended version for half of the includes:
+                # includes = [
+                #     { path = "../core" },
+                #     "../calc",
+                # ]
+                #
+                for i, relative_path in enumerate(relative_paths_to_root):
+                    if i % 2 == 0:
+                        env_content.append(f'  {{ path = "{relative_path}" }},')
+                    else:
+                        env_content.append(f'  "{relative_path}",')
+                env_content.append("]")
+            toml_path.write_text("\n".join(env_content))
+            return toml_path
+        case _:
+            assert 0, f"unknown flavor: {flavor}"
+
+
+@pytest.fixture(scope="session", params=[Flavor.Conda, Flavor.Pixi])
+def devenv_flavor(request: pytest.FixtureRequest) -> Flavor:
+    return Flavor(request.param)
+
+
 @pytest.fixture(scope="session")
-def project_tree(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    test_projects = tmp_path_factory.mktemp("test_projects")
+def project_tree(tmp_path_factory: pytest.TempPathFactory, devenv_flavor: Flavor) -> Path:
+    root = tmp_path_factory.mktemp(devenv_flavor.value)
+    test_projects = root.joinpath("test_projects")
+    test_projects.mkdir()
     projects = {
         "root_a": ["dep_a.1", "dep_a.2"],
         "root_b": ["bs/dep_b.1"],
@@ -49,15 +123,8 @@ def project_tree(tmp_path_factory: pytest.TempPathFactory) -> Path:
         proj_dir = test_projects.joinpath(*proj_path)
         proj_dir.mkdir(parents=True, exist_ok=True)
         test_projects.joinpath(proj_path[0], ".git").mkdir(exist_ok=True)  # Fake git repo.
-        env_yml = proj_dir.joinpath("environment.devenv.yml")
-        env_content = [f"name: {proj}", ""]
-        if len(deps) > 0:
-            env_content.append("includes:")
-            env_content.extend(
-                [f"  - {{{{ root }}}}/../{dep}/environment.devenv.yml" for dep in deps]
-            )
-            env_content.append("")
-        env_yml.write_text("\n".join(env_content))
+        create_devenv_file(devenv_flavor, proj_dir, [f"../{dep}" for dep in deps])
+
     # Add a non-project folder.
     test_projects.joinpath("not_a_project").mkdir()
     # Add test scripts to some projects.
@@ -156,9 +223,10 @@ def test_cant_find_root(
     assert result.exception is None or isinstance(result.exception, SystemExit)
     assert result.exit_code != 0
     matcher = LineMatcher(result.output.splitlines())
+    prefix = 'deps: error: could not find one of ("environment.devenv.yml", "pixi.devenv.toml") for'
     matcher.fnmatch_lines(
         [
-            'deps: error: could not find "environment.devenv.yml" for "*[\\/]test_projects0[\\/]not_a_project".',
+            f'{prefix} "*[\\/]not_a_project".',
         ]
     )
 
@@ -170,7 +238,7 @@ def test_cant_find_root(
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines(
         [
-            'deps: error: could not find "environment.devenv.yml" for "*[\\/]test_projects0[\\/]not_a_valid_folder".',
+            f'{prefix} "*[\\/]not_a_valid_folder".',
         ]
     )
 
@@ -196,19 +264,19 @@ def test_execution_on_project_dir(
         [
             f"{expected_prefix}dep_z (1/4)",
             'deps: executing: python -c "name:\\ dep_z"',
-            "deps: from:      *[\\/]test_projects0[\\/]dep_z",
+            "deps: from:      *[\\/]test_projects[\\/]dep_z",
             "deps: return code: 0",
             f"{expected_prefix}dep_b.1.1 (2/4)",
             'deps: executing: python -c "name:\\ dep_b.1.1"',
-            "deps: from:      *[\\/]test_projects0[\\/]bs[\\/]dep_b.1.1",
+            "deps: from:      *[\\/]test_projects[\\/]bs[\\/]dep_b.1.1",
             "deps: return code: 0",
             f"{expected_prefix}dep_b.1 (3/4)",
             'deps: executing: python -c "name:\\ dep_b.1"',
-            "deps: from:      *[\\/]test_projects0[\\/]bs[\\/]dep_b.1",
+            "deps: from:      *[\\/]test_projects[\\/]bs[\\/]dep_b.1",
             "deps: return code: 0",
             f"{expected_prefix}root_b (4/4)",
             'deps: executing: python -c "name:\\ root_b"',
-            "deps: from:      *[\\/]test_projects0[\\/]root_b",
+            "deps: from:      *[\\/]test_projects[\\/]root_b",
             "deps: return code: 0",
         ]
     )
@@ -285,17 +353,17 @@ def test_script_execution(
     matcher.fnmatch_lines(
         [
             "dep_z (1/4)",
-            "deps: executing: tasks[\\/]asd dep_z *[\\/]test_projects0[\\/]dep_z",
-            "deps: from:      *[\\/]test_projects0[\\/]dep_z",
-            "Sample script dep_z *[\\/]test_projects0[\\/]dep_z",
+            "deps: executing: tasks[\\/]asd dep_z *[\\/]test_projects[\\/]dep_z",
+            "deps: from:      *[\\/]test_projects[\\/]dep_z",
+            "Sample script dep_z *[\\/]test_projects[\\/]dep_z",
             "",
             "deps: return code: 0",
             'dep_b.1.1: skipping since "*[\\/]tasks[\\/]asd" does not exist',
             'dep_b.1: skipping since "*[\\/]tasks[\\/]asd" does not exist',
             "root_b (4/4)",
-            "deps: executing: tasks[\\/]asd root_b *[\\/]test_projects0[\\/]root_b",
-            "deps: from:      *[\\/]test_projects0[\\/]root_b",
-            "Sample script root_b *[\\/]test_projects0[\\/]root_b",
+            "deps: executing: tasks[\\/]asd root_b *[\\/]test_projects[\\/]root_b",
+            "deps: from:      *[\\/]test_projects[\\/]root_b",
+            "Sample script root_b *[\\/]test_projects[\\/]root_b",
             "",
             "deps: return code: 0",
         ]
@@ -314,8 +382,8 @@ def test_script_return_code(
     matcher.fnmatch_lines(
         [
             "dep_z (1/4)",
-            "deps: executing: tasks[\\/]does-not-exist dep_z *[\\/]test_projects0[\\/]dep_z",
-            "deps: from:      *[\\/]test_projects0[\\/]dep_z",
+            "deps: executing: tasks[\\/]does-not-exist dep_z *[\\/]test_projects[\\/]dep_z",
+            "deps: from:      *[\\/]test_projects[\\/]dep_z",
             "deps: return code: *",
             "deps: error: Command failed (project: dep_z)",
         ]
@@ -559,14 +627,14 @@ def test_require_file(cli_runner: CliRunner, project_tree: Path, piped_shell_exe
         [
             "dep_z (1/4)",
             "deps: executing: echo This is dep_z",
-            "deps: from:      *[\\/]test_projects0[\\/]dep_z",
+            "deps: from:      *[\\/]test_projects[\\/]dep_z",
             "This is dep_z",
             "deps: return code: 0",
-            'dep_b.1.1: skipping since "*[\\/]test_projects0[\\/]bs[\\/]dep_b.1.1[\\/]tasks[\\/]asd" does not exist',
-            'dep_b.1: skipping since "*[\\/]test_projects0[\\/]bs[\\/]dep_b.1[\\/]tasks[\\/]asd" does not exist',
+            'dep_b.1.1: skipping since "*[\\/]test_projects[\\/]bs[\\/]dep_b.1.1[\\/]tasks[\\/]asd" does not exist',
+            'dep_b.1: skipping since "*[\\/]test_projects[\\/]bs[\\/]dep_b.1[\\/]tasks[\\/]asd" does not exist',
             "root_b (4/4)",
             "deps: executing: echo This is root_b",
-            "deps: from:      *[\\/]test_projects0[\\/]root_b",
+            "deps: from:      *[\\/]test_projects[\\/]root_b",
             "This is root_b",
             "deps: return code: 0",
         ]
@@ -663,9 +731,9 @@ def test_list_repos(cli_runner: CliRunner, project_tree: Path, piped_shell_execu
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines(
         [
-            "*[\\/]test_projects0[\\/]cs2",
-            "*[\\/]test_projects0[\\/]cs1",
-            "*[\\/]test_projects0[\\/]root_c",
+            "*[\\/]test_projects[\\/]cs2",
+            "*[\\/]test_projects[\\/]cs1",
+            "*[\\/]test_projects[\\/]root_c",
         ]
     )
 
@@ -677,11 +745,11 @@ def test_list_repos(cli_runner: CliRunner, project_tree: Path, piped_shell_execu
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines(
         [
-            "*[\\/]test_projects0[\\/]root_c",
-            "    *[\\/]test_projects0[\\/]cs1",
-            "        (*[\\/]test_projects0[\\/]cs1)",
-            "        *[\\/]test_projects0[\\/]cs2",
-            "            (*[\\/]test_projects0[\\/]cs1)",
+            "*[\\/]test_projects[\\/]root_c",
+            "    *[\\/]test_projects[\\/]cs1",
+            "        (*[\\/]test_projects[\\/]cs1)",
+            "        *[\\/]test_projects[\\/]cs2",
+            "            (*[\\/]test_projects[\\/]cs1)",
         ]
     )
 
@@ -699,9 +767,9 @@ def test_list_repos_with_ignored_project(
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines(
         [
-            "*[\\/]test_projects0[\\/]root_c",
-            "    *[\\/]test_projects0[\\/]cs1",
-            "        (*[\\/]test_projects0[\\/]cs1)",
+            "*[\\/]test_projects[\\/]root_c",
+            "    *[\\/]test_projects[\\/]cs1",
+            "        (*[\\/]test_projects[\\/]cs1)",
         ]
     )
 
@@ -712,10 +780,10 @@ def test_list_repos_with_ignored_project(
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines(
         [
-            "*[\\/]test_projects0[\\/]root_c",
-            "    *[\\/]test_projects0[\\/]cs1",
-            "        (*[\\/]test_projects0[\\/]cs1)",
-            "        <*[\\/]test_projects0[\\/]cs2>",
+            "*[\\/]test_projects[\\/]root_c",
+            "    *[\\/]test_projects[\\/]cs1",
+            "        (*[\\/]test_projects[\\/]cs1)",
+            "        <*[\\/]test_projects[\\/]cs2>",
         ]
     )
 
@@ -733,11 +801,11 @@ def test_list_repos_with_skipped_project(
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines(
         [
-            "*[\\/]test_projects0[\\/]root_c",
-            "    *[\\/]test_projects0[\\/]cs1",
-            "        (*[\\/]test_projects0[\\/]cs1)",
-            "        *[\\/]test_projects0[\\/]cs2",
-            "            (*[\\/]test_projects0[\\/]cs1)",
+            "*[\\/]test_projects[\\/]root_c",
+            "    *[\\/]test_projects[\\/]cs1",
+            "        (*[\\/]test_projects[\\/]cs1)",
+            "        *[\\/]test_projects[\\/]cs2",
+            "            (*[\\/]test_projects[\\/]cs1)",
         ]
     )
 
@@ -748,11 +816,11 @@ def test_list_repos_with_skipped_project(
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines(
         [
-            "*[\\/]test_projects0[\\/]root_c",
-            "    *[\\/]test_projects0[\\/]cs1",
-            "        (*[\\/]test_projects0[\\/]cs1)",
-            "        {*[\\/]test_projects0[\\/]cs2}",
-            "            (*[\\/]test_projects0[\\/]cs1)",
+            "*[\\/]test_projects[\\/]root_c",
+            "    *[\\/]test_projects[\\/]cs1",
+            "        (*[\\/]test_projects[\\/]cs1)",
+            "        {*[\\/]test_projects[\\/]cs2}",
+            "            (*[\\/]test_projects[\\/]cs1)",
         ]
     )
 
@@ -774,9 +842,9 @@ def test_list_repos_conflict_skipped_ignored_project(
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines(
         [
-            "*[\\/]test_projects0[\\/]root_c",
-            "    *[\\/]test_projects0[\\/]cs1",
-            "        (*[\\/]test_projects0[\\/]cs1)",
+            "*[\\/]test_projects[\\/]root_c",
+            "    *[\\/]test_projects[\\/]cs1",
+            "        (*[\\/]test_projects[\\/]cs1)",
         ]
     )
 
@@ -791,10 +859,10 @@ def test_list_repos_conflict_skipped_ignored_project(
     matcher = LineMatcher(result.output.splitlines())
     matcher.fnmatch_lines(
         [
-            "*[\\/]test_projects0[\\/]root_c",
-            "    *[\\/]test_projects0[\\/]cs1",
-            "        (*[\\/]test_projects0[\\/]cs1)",
-            "        <*[\\/]test_projects0[\\/]cs2>",
+            "*[\\/]test_projects[\\/]root_c",
+            "    *[\\/]test_projects[\\/]cs1",
+            "        (*[\\/]test_projects[\\/]cs1)",
+            "        <*[\\/]test_projects[\\/]cs2>",
         ]
     )
 
@@ -815,16 +883,16 @@ def test_list_repos_precedence(
     if mode == "skipped":
         matcher.fnmatch_lines(
             [
-                "*[\\/]test_projects0[\\/]root_d",
-                "    {*[\\/]test_projects0[\\/]d}",
+                "*[\\/]test_projects[\\/]root_d",
+                "    {*[\\/]test_projects[\\/]d}",
             ]
         )
     else:
         assert mode == "normal"
         matcher.fnmatch_lines(
             [
-                "*[\\/]test_projects0[\\/]root_d",
-                "    *[\\/]test_projects0[\\/]d",
+                "*[\\/]test_projects[\\/]root_d",
+                "    *[\\/]test_projects[\\/]d",
             ]
         )
 
@@ -949,11 +1017,16 @@ def test_deps_parallel_3(
     assert result.output.count("foo") == 6
 
 
-def test_no_expected_env_file(
+def test_conda_devenv_different_environment_filename(
     cli_runner: CliRunner,
     tmp_path_factory: pytest.TempPathFactory,
     piped_shell_execute: None,
 ) -> None:
+    """
+    Test that including a file named differently than `environment.devenv.yml` works.
+
+    This is exclusive for conda-devenv, given pixi-devenv does not support multiple devenv files.
+    """
     test_projects = tmp_path_factory.mktemp("test_projects")
     projects = {
         "expected_env_file": (
@@ -991,16 +1064,17 @@ def test_no_expected_env_file(
     )
 
 
-def test_empty_environment(
+def test_empty_environment_file(
     cli_runner: CliRunner,
     tmp_path_factory: pytest.TempPathFactory,
     piped_shell_execute: None,
+    devenv_flavor: Flavor,
 ) -> None:
     test_project = tmp_path_factory.mktemp("test_empty_environment")
     proj_dir = test_project.joinpath("project_with_empty_environment")
     proj_dir.mkdir()
-    env_yml = proj_dir.joinpath("environment.devenv.yml")
-    env_yml.write_text("")
+    env_file = proj_dir / get_devenv_filename(devenv_flavor)
+    env_file.touch()
 
     root = str(proj_dir)
     command_args = ["-p", root, "echo", "test", "{name}"]
@@ -1016,15 +1090,11 @@ def test_empty_environment(
 
 
 def test_empty_includes(
-    cli_runner: CliRunner,
-    tmp_path_factory: pytest.TempPathFactory,
-    piped_shell_execute: None,
+    cli_runner: CliRunner, tmp_path: Path, piped_shell_execute: None, devenv_flavor: Flavor
 ) -> None:
-    test_project = tmp_path_factory.mktemp("test_empty_includes")
-    proj_dir = test_project.joinpath("project_with_empty_includes")
+    proj_dir = tmp_path.joinpath("project_with_empty_includes")
     proj_dir.mkdir()
-    env_yml = proj_dir.joinpath("environment.devenv.yml")
-    env_yml.write_text("includes:")
+    create_devenv_file(devenv_flavor, proj_dir, [])
 
     root = str(proj_dir)
     command_args = ["-p", root, "echo", "test", "{name}"]

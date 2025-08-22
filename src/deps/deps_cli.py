@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any
+from typing import Any, NoReturn
 
 import click
 import importlib_metadata
@@ -56,11 +56,7 @@ def echo_error(*args: Any, **kwargs: Any) -> None:
     click.secho(*args, **kwargs)
 
 
-# ==================================================================================================
-# Customizations
-# ==================================================================================================
-
-FILE_WITH_DEPENDENCIES = "environment.devenv.yml"
+DEVENV_FILES = ("environment.devenv.yml", "pixi.devenv.toml")
 
 
 @functools.cache
@@ -72,18 +68,56 @@ def get_shallow_dependencies(dev_env_file: Path) -> Sequence[Path]:
         The first level (does not recursively list dependencies of dependencies)
         dependencies of the project rooted in the given directory.
     """
-    import jinja2
-    import yaml
+    match dev_env_file.suffix:
+        case ".yml":
+            import jinja2
+            import yaml
 
-    # NOTE: From [conda-devenv](https://conda-devenv.readthedocs.io/en/latest/usage.html#jinja2)
-    jinja_args = {"root": str(dev_env_file.parent), "os": os, "sys": sys, "platform": platform}
+            # NOTE: From [conda-devenv](https://conda-devenv.readthedocs.io/en/latest/usage.html#jinja2)
+            jinja_args = {
+                "root": str(dev_env_file.parent),
+                "os": os,
+                "sys": sys,
+                "platform": platform,
+            }
 
-    yaml_contents = jinja2.Template(dev_env_file.read_text(encoding="UTF-8")).render(**jinja_args)
+            yaml_contents = jinja2.Template(dev_env_file.read_text(encoding="UTF-8")).render(
+                **jinja_args
+            )
 
-    data = yaml.safe_load(yaml_contents) or {}
-    if not data.get("includes"):
-        return []
-    return [Path(os.path.abspath(p)) for p in data["includes"]]
+            data = yaml.safe_load(yaml_contents) or {}
+            if not data.get("includes"):
+                return []
+            return [Path(os.path.abspath(p)) for p in data["includes"]]
+        case ".toml":
+            import tomli
+
+            data = tomli.loads(dev_env_file.read_text(encoding="UTF-8"))
+            if not data.get("includes"):
+                return []
+
+            def get_relative_path(entry: str | dict[str, str]) -> str:
+                """Include entries have two possible formats:
+
+                includes = [
+                    "../core",
+                    { path = "../calc" },
+                ]
+                """
+                if isinstance(entry, dict):
+                    return entry["path"]
+                else:
+                    return entry
+
+            return [
+                Path(os.path.abspath(dev_env_file.parent / get_relative_path(p)))
+                / "pixi.devenv.toml"
+                for p in data["includes"]
+            ]
+        case ext:  # pragma: no cover
+            msg = f"Cannot parse files with extension {ext}"
+            echo_error(msg)
+            raise click.ClickException(msg)
 
 
 @dataclass(eq=False)
@@ -217,11 +251,12 @@ def find_directories(raw_directories: list[str]) -> list[str]:
     directories = []
 
     for raw_dir in raw_directories:
-        directory = find_ancestor_dir_with(FILE_WITH_DEPENDENCIES, raw_dir)
-        if directory is None:
-            msg = f'could not find "{FILE_WITH_DEPENDENCIES}" for "{raw_dir}".'
-            echo_error(msg)
-            raise click.ClickException(msg)
+        for dev_env_base_name in DEVENV_FILES:
+            directory = find_ancestor_dir_with(dev_env_base_name, raw_dir)
+            if directory is not None:
+                break
+        else:
+            _error_could_not_find_dev_env_files(raw_dir)
         directories.append(directory)
 
     return directories
@@ -264,11 +299,23 @@ def obtain_all_dependencies_recursively(
                 dep = all_deps[dep_directory]
             list_to_add_deps.append(dep)
 
+    def get_dev_env_file(dir: Path) -> Path:
+        for base_name in DEVENV_FILES:
+            p = dir / base_name
+            if p.is_file():
+                return p
+        _error_could_not_find_dev_env_files(dir)
+
     root_deps: list[Dep] = []
-    add_deps_from_directories(
-        [Path(p, FILE_WITH_DEPENDENCIES) for p in root_directories], root_deps
-    )
+    add_deps_from_directories([get_dev_env_file(Path(p)) for p in root_directories], root_deps)
     return root_deps
+
+
+def _error_could_not_find_dev_env_files(path: str | Path) -> NoReturn:
+    files = '(' + ', '.join(f'"{x}"' for x in DEVENV_FILES) + ')'
+    msg = f'could not find one of {files} for "{path}".'
+    echo_error(msg)
+    raise click.ClickException(msg)
 
 
 def obtain_repos(dep_list: list[Dep]) -> list[Dep]:

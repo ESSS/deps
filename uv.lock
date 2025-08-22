@@ -42,6 +42,7 @@ dependencies = [
     { name = "importlib-metadata" },
     { name = "jinja2" },
     { name = "pyyaml" },
+    { name = "tomli" },
     { name = "typing-extensions" },
 ]
 
@@ -60,6 +61,7 @@ requires-dist = [
     { name = "importlib-metadata", specifier = ">=8.7.0" },
     { name = "jinja2", specifier = ">=3.1" },
     { name = "pyyaml", specifier = ">=6.0.2" },
+    { name = "tomli", specifier = ">=2.2.1" },
     { name = "typing-extensions" },
 ]
 
