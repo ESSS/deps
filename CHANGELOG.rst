@@ -1,3 +1,8 @@
+1.5.1 (2025-08-26)
+------------------
+
+* Modify ``find_directories`` to perform a depth-first search for all devenv files. This will ensure it finds the closest ``environment.devenv.yml`` or ``pixi.devenv.toml`` to the starting directory, rather than searching the entire hierarchy for one file type before attempting to find the other.
+
 1.5.0 (2025-08-22)
 ------------------
 
