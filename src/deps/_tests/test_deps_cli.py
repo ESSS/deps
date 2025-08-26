@@ -10,8 +10,10 @@ from typing import Any
 import pytest
 from _pytest.pytester import LineMatcher
 from click.testing import CliRunner
+from typing_extensions import assert_never
 
 from deps import deps_cli
+from deps.deps_cli import find_ancestor_dir_with, find_directories
 
 
 @pytest.fixture(autouse=True)
@@ -1135,3 +1137,36 @@ def test_work_dir(
     assert len(set(lines)) == 1
     # Ensure the work directory no longer exists at this point.
     assert not Path(lines[0]).is_dir()
+
+
+def test_find_directories(
+    tmp_path: Path, devenv_flavor: Flavor, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """find_directories() needs to find the nearest environment.devenv.yml or pixi.devenv.toml file."""
+    (tmp_path / "a/b/c/d").mkdir(parents=True)
+    monkeypatch.chdir(tmp_path / "a/b/c/d")
+
+    # In both cases below, find_directories needs to find the nearest devenv file in a/b/c, even
+    # if another devenv file could be reached further up.
+    match devenv_flavor:
+        case Flavor.Conda:
+            (tmp_path / "environment.devenv.yml").touch()
+            (tmp_path / "a/b/c/pixi.devenv.toml").touch()
+        case Flavor.Pixi:
+            (tmp_path / "pixi.devenv.toml").touch()
+            (tmp_path / "a/b/c/environment.devenv.yml").touch()
+        case unreachable:
+            assert_never(unreachable)
+
+    assert find_directories(["c"]) == [str(tmp_path / "a/b/c")]
+
+
+def test_find_ancestor_dir_with(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """find_ancestor_dir_with() also works with directories."""
+    (tmp_path / "a/b/c/d").mkdir(parents=True)
+    monkeypatch.chdir(tmp_path / "a/b/c/d")
+    (tmp_path / "a/b/.git").mkdir()
+    (tmp_path / "a/b/c/.boo").mkdir()
+
+    assert find_ancestor_dir_with(".git") == str(tmp_path / "a/b")
+    assert find_ancestor_dir_with([".boo", ".git"]) == str(tmp_path / "a/b/c")

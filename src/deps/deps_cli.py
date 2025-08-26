@@ -214,23 +214,28 @@ def pretty_print_dependency_tree(root_deps: list[Dep]) -> None:
     print_deps(root_deps)
 
 
-def find_ancestor_dir_with(filename: str, begin_in: str | None = None) -> str | None:
+def find_ancestor_dir_with(
+    filename: str | Sequence[str], begin_in: str | None = None
+) -> str | None:
     """
-    Look in current and ancestor directories (parent, parent of parent, ...) for a file.
+    Look in current and ancestor directories (parent, parent of parent, ...) for a file/directory or list of files/directories.
 
-    :param filename: File to find.
+    :param filename: File or files to find.
     :param begin_in: Directory to start searching.
 
     :return: Absolute path to directory where file is located.
     """
     if begin_in is None:
-        begin_in = os.curdir
+        begin_in = os.getcwd()
+
+    filenames = [filename] if isinstance(filename, str) else filename
 
     base_directory = os.path.abspath(begin_in)
     while True:
         directory = base_directory
-        if os.path.exists(os.path.join(directory, filename)):
-            return directory
+        for filename in filenames:
+            if os.path.exists(os.path.join(directory, filename)):
+                return directory
 
         parent_base_directory, current_dir_name = os.path.split(base_directory)
         if len(current_dir_name) == 0:
@@ -251,13 +256,10 @@ def find_directories(raw_directories: list[str]) -> list[str]:
     directories = []
 
     for raw_dir in raw_directories:
-        for dev_env_base_name in DEVENV_FILES:
-            directory = find_ancestor_dir_with(dev_env_base_name, raw_dir)
-            if directory is not None:
-                break
+        if (directory := find_ancestor_dir_with(DEVENV_FILES, raw_dir)) is not None:
+            directories.append(directory)
         else:
             _error_could_not_find_dev_env_files(raw_dir)
-        directories.append(directory)
 
     return directories
 
