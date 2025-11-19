@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "deps"
-version = "1.4.0"
+version = "1.6.0"
 description = "A tool to manipulate the dependencies and the project itself"
 readme = "README.md"
 authors = [
