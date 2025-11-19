@@ -1,3 +1,9 @@
+UNRELEASED
+----------
+
+* Support `pixi-devenv 0.1.0` or later.
+
+
 1.5.1 (2025-08-26)
 ------------------
 

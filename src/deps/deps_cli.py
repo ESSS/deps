@@ -92,14 +92,10 @@ def get_shallow_dependencies(dev_env_file: Path) -> Sequence[Path]:
         case ".toml":
             import tomli
 
-            data = tomli.loads(dev_env_file.read_text(encoding="UTF-8"))
-            if not data.get("includes"):
-                return []
-
             def get_relative_path(entry: str | dict[str, str]) -> str:
-                """Include entries have two possible formats:
+                """pixi-devenv entries have two possible formats:
 
-                includes = [
+                devenv.upstream = [
                     "../core",
                     { path = "../calc" },
                 ]
@@ -109,11 +105,16 @@ def get_shallow_dependencies(dev_env_file: Path) -> Sequence[Path]:
                 else:
                     return entry
 
-            return [
-                Path(os.path.abspath(dev_env_file.parent / get_relative_path(p)))
-                / "pixi.devenv.toml"
-                for p in data["includes"]
-            ]
+            data = tomli.loads(dev_env_file.read_text(encoding="UTF-8"))
+            match data:
+                case {"devenv": {"upstream": upstream}} if upstream:
+                    return [
+                        Path(os.path.abspath(dev_env_file.parent / get_relative_path(p)))
+                        / "pixi.devenv.toml"
+                        for p in upstream
+                    ]
+                case _:
+                    return []
         case ext:  # pragma: no cover
             msg = f"Cannot parse files with extension {ext}"
             echo_error(msg)

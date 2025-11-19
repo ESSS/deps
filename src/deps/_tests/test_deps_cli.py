@@ -71,7 +71,8 @@ def create_devenv_file(
             toml_path = root_dir / get_devenv_filename(flavor)
             env_content = []
             if relative_paths_to_root is not None:
-                env_content.append("includes = [")
+                env_content.append("[devenv]")
+                env_content.append("upstream = [")
                 # Use the extended version for half of the includes:
                 # includes = [
                 #     { path = "../core" },
