@@ -749,10 +749,10 @@ def execute(
         A tuple with (returncode, stdout, stderr, time to execute command).
     """
     if not sys.platform.startswith("win"):
-        import pipes
+        import shlex
 
         for index, item in enumerate(formatted_command):
-            formatted_command[index] = pipes.quote(item)
+            formatted_command[index] = shlex.quote(item)
         command = " ".join(formatted_command)
     else:
         command = formatted_command
