@@ -30,7 +30,7 @@ dev = [
     # this breaks test_force_color in our test suite.
     "click>=8.1,!=8.2.*",
     "pre-commit>=4.3.0",
-    "pytest>=8.4.1",
+    "pytest>=9.0.3",
     "pytest-mock>=3.14.1",
 ]
 
