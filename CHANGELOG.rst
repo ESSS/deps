@@ -1,5 +1,5 @@
-UNRELEASED
-----------
+1.7.0 (2026-06-01)
+------------------
 
 * Support Python 3.13+ by dropping usage of `pipes` module, which has since then been removed.
 
