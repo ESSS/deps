@@ -52,6 +52,7 @@ extend-select = [
 ]
 ignore = [
     "B011",  # Do not `assert False`
+    "BLE001",  # Do not catch blind exception: `Exception`
     "E501",  # Line too long
     "PLC0415", # `import` should be at the top-level of a file
     "PLR",  # Heuristics from pylint.

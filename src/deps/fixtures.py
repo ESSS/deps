@@ -7,7 +7,7 @@ from click.testing import CliRunner
 from pytest_mock import MockerFixture
 
 
-@pytest.yield_fixture
+@pytest.fixture
 def cli_runner() -> Iterator[CliRunner]:
     """
     Fixture used to test click applications.

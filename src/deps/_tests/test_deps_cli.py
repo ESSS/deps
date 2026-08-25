@@ -1123,11 +1123,11 @@ def test_work_dir(
         "--",
         "python",
         "-c",
-        "import os;"
+        ("import os;"
         "from pathlib import Path;"
         "d=Path(os.environ['DEPS_WORK_DIR']);"
         "print(d);"
-        "d.joinpath('foo').write_text('hello')",
+        "d.joinpath('foo').write_text('hello')"),
     ]
     monkeypatch.chdir(project_tree.joinpath("root_b"))
     result = cli_runner.invoke(deps_cli.cli, command_args)
