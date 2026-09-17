@@ -1,5 +1,5 @@
-UNRELEASED
-----------
+1.8.0 (2026-09-17)
+------------------
 
 * Require ``click>=8.5.0``. This drops a Windows-only workaround that monkey-patched
   ``click.utils.auto_wrap_for_ansi`` to force raw ANSI codes through when ``--force-color``

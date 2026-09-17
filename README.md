@@ -150,6 +150,10 @@ Options Description:
 
     Show this message and exit.
 
+# Releasing
+
+See [RELEASING.md](RELEASING.md) for the steps to publish a new release.
+
 # License
 
 Free software: MIT license
