@@ -1,3 +1,13 @@
+UNRELEASED
+----------
+
+* Require ``click>=8.5.0``. This drops a Windows-only workaround that monkey-patched
+  ``click.utils.auto_wrap_for_ansi`` to force raw ANSI codes through when ``--force-color``
+  was used; click 8.5.0 removed its colorama-based wrapping on Windows entirely, which made
+  the attribute disappear (breaking ``deps`` on click 8.5.0+) and made the workaround
+  unnecessary, since ``echo()`` already writes raw ANSI codes when ``color=True`` is passed
+  explicitly.
+
 1.7.0 (2026-06-01)
 ------------------
 

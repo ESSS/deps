@@ -918,15 +918,9 @@ def cli(
 
     initial_time = time.time()
     global _click_echo_color
-    original_auto_wrap_for_ansi = click.utils.auto_wrap_for_ansi
     try:
         if force_color:
             _click_echo_color = True
-            if sys.platform == "win32":
-                # Click always wrap the output stream on windows calling
-                # `click.utils.auto_wrap_for_ansi`, setting to `None` causes ansi escape codes to
-                # be output.
-                click.utils.auto_wrap_for_ansi = None
 
         directories = find_directories(project)
 
@@ -987,7 +981,6 @@ def cli(
         sys.exit(execution_return[-1] if execution_return else 1)
     finally:
         _click_echo_color = None
-        click.utils.auto_wrap_for_ansi = original_auto_wrap_for_ansi
 
 
 @contextmanager
